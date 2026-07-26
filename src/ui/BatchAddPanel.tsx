@@ -227,17 +227,21 @@ export function BatchAddPanel({ onToast, onError }: BatchAddPanelProps): JSX.Ele
                 return (
                   <div
                     key={track.track_ref}
-                    className={`flex items-center gap-2.5 py-2 pr-1 border-b border-hairline border-l-2 last:border-b-0 ${
-                      selected ? 'border-l-accent bg-panel-2' : 'border-l-transparent'
+                    role="checkbox"
+                    aria-checked={selected}
+                    tabIndex={0}
+                    onClick={() => toggleRef(track.track_ref)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        toggleRef(track.track_ref);
+                      }
+                    }}
+                    className={`flex items-center gap-2.5 py-2 border-b border-l-2 border-hairline last:border-b-0 cursor-pointer select-none ${
+                      selected ? 'border-l-accent bg-panel-2' : 'border-l-transparent hover:bg-panel-2'
                     }`}
                   >
-                    <input
-                      type="checkbox"
-                      checked={selected}
-                      onChange={() => toggleRef(track.track_ref)}
-                      aria-label={t('batch.selectTrack', { title: track.title })}
-                      className="ml-2 accent-[var(--accent)]"
-                    />
+                    <span className={`w-3.5 text-[11px] ${selected ? 'text-accent' : 'text-transparent'}`}>✓</span>
                     <div className="min-w-0 flex-1">
                       <div className="text-[13px] truncate">{track.title}</div>
                       <div className="text-[11px] text-muted truncate">{track.artist}</div>
@@ -247,12 +251,13 @@ export function BatchAddPanel({ onToast, onError }: BatchAddPanelProps): JSX.Ele
                     </span>
                     <button
                       type="button"
-                      onClick={() =>
+                      onClick={(event) => {
+                        event.stopPropagation();
                         void roomStore
                           .addQueue([track.track_ref])
                           .then(() => onToast(t('room.addedToast', { title: track.title })))
-                          .catch(onError)
-                      }
+                          .catch(onError);
+                      }}
                       className="text-accent text-lg leading-none px-1.5 hover:brightness-110"
                       title={t('search.add')}
                     >
@@ -305,17 +310,21 @@ export function BatchAddPanel({ onToast, onError }: BatchAddPanelProps): JSX.Ele
                         return (
                           <div
                             key={item.ord}
-                            className={`flex items-center gap-2.5 py-2 pr-1 border-b border-hairline border-l-2 last:border-b-0 ${
-                              selected ? 'border-l-accent bg-panel-2' : 'border-l-transparent'
+                            role="checkbox"
+                            aria-checked={selected}
+                            tabIndex={0}
+                            onClick={() => toggleRef(item.track_ref)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                toggleRef(item.track_ref);
+                              }
+                            }}
+                            className={`flex items-center gap-2.5 py-2 border-b border-l-2 border-hairline last:border-b-0 cursor-pointer select-none ${
+                              selected ? 'border-l-accent bg-panel-2' : 'border-l-transparent hover:bg-panel-2'
                             }`}
                           >
-                            <input
-                              type="checkbox"
-                              checked={selected}
-                              onChange={() => toggleRef(item.track_ref)}
-                              aria-label={t('batch.selectTrack', { title: item.title })}
-                              className="ml-2 accent-[var(--accent)]"
-                            />
+                            <span className={`w-3.5 text-[11px] ${selected ? 'text-accent' : 'text-transparent'}`}>✓</span>
                             <span className="w-6 text-right font-mono text-[10px] text-faint tabular-nums">
                               {item.ord}
                             </span>

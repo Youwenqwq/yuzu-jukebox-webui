@@ -24,6 +24,15 @@ export const zhCN = {
     custom: '自定义颜色',
     switchScheme: '切换深色 / 浅色',
   },
+  admin: {
+    title: '管理',
+    entry: '管理',
+    backToLobby: '← 大厅',
+    tabPlaylists: '歌单',
+    tabMedia: '媒体',
+    tabPlayers: '播放端',
+    placeholder: '建设中',
+  },
   login: {
     title: '进入大厅',
     namePlaceholder: '你的名字',
@@ -81,7 +90,6 @@ export const zhCN = {
     selectedCount: '已选 {{count}} 首',
     addSelected: '点这些',
     clear: '清除',
-    selectTrack: '选择 {{title}}',
     playlistsLoading: '歌单加载中…',
     playlistsEmpty: '还没有歌单',
     trackCount: '{{count}} 首',

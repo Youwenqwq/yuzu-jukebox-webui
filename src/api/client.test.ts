@@ -174,4 +174,299 @@ describe('ApiClient', () => {
       'https://yuzu.test/api/v1/playlists/%E6%99%9A%20%E9%A3%8E%2F%E7%B2%BE%E9%80%89?offset=50&limit=25',
     );
   });
+
+  it('manages rooms with the server wire format and unwraps history and stats', async () => {
+    const room = { id: 'room /一', name: 'Morning' };
+    const history = {
+      track_ref: 'ncm:42',
+      title: 'Song',
+      requested_by: 'g_alice',
+      started_at: 100,
+      ended_at: 200,
+      end_reason: 'finished',
+    };
+    const stat = {
+      track_ref: 'ncm:42',
+      title: 'Song',
+      play_count: 3,
+      first_played_at: 100,
+      last_played_at: 300,
+    };
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ room }))
+      .mockResolvedValueOnce(jsonResponse({ room: { ...room, name: 'Evening' } }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }))
+      .mockResolvedValueOnce(jsonResponse({ history: [history] }))
+      .mockResolvedValueOnce(jsonResponse({ stats: [stat] }));
+    const client = new ApiClient(() => 'admin-token', {
+      base: 'https://yuzu.test',
+      fetchFn,
+    });
+
+    await expect(
+      client.createRoom({
+        id: room.id,
+        name: room.name,
+        guest_password: 'guest',
+        policy: { max_queue: 20, queue_limits: { requester: 5 } },
+      }),
+    ).resolves.toEqual(room);
+    await expect(
+      client.updateRoom(room.id, {
+        name: 'Evening',
+        guest_password: '',
+        policy: { max_queue: 30 },
+      }),
+    ).resolves.toEqual({ ...room, name: 'Evening' });
+    await expect(client.deleteRoom(room.id)).resolves.toBeUndefined();
+    await expect(client.roomHistory(room.id, 10, 25)).resolves.toEqual([history]);
+    await expect(client.roomStats(room.id, 7)).resolves.toEqual([stat]);
+
+    const encodedRoom = 'room%20%2F%E4%B8%80';
+    const [createUrl, createInit] = fetchFn.mock.calls[0];
+    expect(createUrl).toBe('https://yuzu.test/api/v1/rooms');
+    expect(createInit?.method).toBe('POST');
+    expect(JSON.parse(String(createInit?.body))).toEqual({
+      id: room.id,
+      name: room.name,
+      guest_password: 'guest',
+      policy: '{"max_queue":20,"queue_limits":{"requester":5}}',
+    });
+
+    const [updateUrl, updateInit] = fetchFn.mock.calls[1];
+    expect(updateUrl).toBe(`https://yuzu.test/api/v1/rooms/${encodedRoom}`);
+    expect(updateInit?.method).toBe('PATCH');
+    expect(JSON.parse(String(updateInit?.body))).toEqual({
+      name: 'Evening',
+      guest_password: '',
+      policy: '{"max_queue":30}',
+    });
+    expect(fetchFn.mock.calls[2][0]).toBe(`https://yuzu.test/api/v1/rooms/${encodedRoom}`);
+    expect(fetchFn.mock.calls[2][1]?.method).toBe('DELETE');
+    expect(fetchFn.mock.calls[3][0]).toBe(
+      `https://yuzu.test/api/v1/rooms/${encodedRoom}/history?offset=10&limit=25`,
+    );
+    expect(fetchFn.mock.calls[4][0]).toBe(
+      `https://yuzu.test/api/v1/rooms/${encodedRoom}/stats?limit=7`,
+    );
+  });
+
+  it('manages playlists using each endpoint actual body and response wrapper', async () => {
+    const playlist = {
+      id: 'pl /精选',
+      name: '精选',
+      description: 'favorites',
+      created_by: 'g_alice',
+      created_at: 100,
+      updated_at: 100,
+      track_count: 0,
+    };
+    const imported = { ...playlist, id: 'pl_imported', name: 'Daily', track_count: 2 };
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ playlist }, 201))
+      .mockResolvedValueOnce(jsonResponse({ deleted: playlist.id }))
+      .mockResolvedValueOnce(jsonResponse({ added: 2 }))
+      .mockResolvedValueOnce(jsonResponse({ deleted: 3 }))
+      .mockResolvedValueOnce(jsonResponse({ moved: 2, to_ord: 5 }))
+      .mockResolvedValueOnce(jsonResponse({ playlist: imported }, 201));
+    const client = new ApiClient(() => 'admin-token', {
+      base: 'https://yuzu.test',
+      fetchFn,
+    });
+
+    await expect(
+      client.createPlaylist({ name: playlist.name, description: playlist.description }),
+    ).resolves.toEqual(playlist);
+    await expect(client.deletePlaylist(playlist.id)).resolves.toBeUndefined();
+    await expect(client.addPlaylistItems(playlist.id, ['ncm:1', 'local:two'])).resolves.toEqual({
+      added: 2,
+    });
+    await expect(client.deletePlaylistItem(playlist.id, 3)).resolves.toEqual({ deleted: 3 });
+    await expect(client.movePlaylistItem(playlist.id, 2, 5)).resolves.toEqual({
+      moved: 2,
+      to_ord: 5,
+    });
+    await expect(
+      client.importPlaylist({ provider: 'ncm', playlist_id: '123 / 456', name: 'Daily' }),
+    ).resolves.toEqual(imported);
+
+    expect(fetchFn.mock.calls[0][0]).toBe('https://yuzu.test/api/v1/playlists');
+    expect(fetchFn.mock.calls[0][1]?.method).toBe('POST');
+    expect(JSON.parse(String(fetchFn.mock.calls[0][1]?.body))).toEqual({
+      name: '精选',
+      description: 'favorites',
+    });
+    const itemBase = 'https://yuzu.test/api/v1/playlists/pl%20%2F%E7%B2%BE%E9%80%89/items';
+    expect(fetchFn.mock.calls[1][0]).toBe(
+      'https://yuzu.test/api/v1/playlists/pl%20%2F%E7%B2%BE%E9%80%89',
+    );
+    expect(fetchFn.mock.calls[1][1]?.method).toBe('DELETE');
+    expect(fetchFn.mock.calls[2][0]).toBe(itemBase);
+    expect(fetchFn.mock.calls[2][1]?.method).toBe('POST');
+    expect(JSON.parse(String(fetchFn.mock.calls[2][1]?.body))).toEqual({
+      track_refs: ['ncm:1', 'local:two'],
+    });
+    expect(fetchFn.mock.calls[3][0]).toBe(`${itemBase}/3`);
+    expect(fetchFn.mock.calls[3][1]?.method).toBe('DELETE');
+    expect(fetchFn.mock.calls[4][0]).toBe(`${itemBase}/2`);
+    expect(fetchFn.mock.calls[4][1]?.method).toBe('PATCH');
+    expect(JSON.parse(String(fetchFn.mock.calls[4][1]?.body))).toEqual({ to_ord: 5 });
+    expect(fetchFn.mock.calls[5][0]).toBe('https://yuzu.test/api/v1/playlists/import');
+    expect(fetchFn.mock.calls[5][1]?.method).toBe('POST');
+    expect(JSON.parse(String(fetchFn.mock.calls[5][1]?.body))).toEqual({
+      provider: 'ncm',
+      playlist_id: '123 / 456',
+      name: 'Daily',
+    });
+  });
+
+  it('uploads media as multipart without a JSON content type and manages cache', async () => {
+    const track = {
+      track_ref: 'local:uploaded',
+      title: 'Upload',
+      artist: 'Alice',
+      duration_ms: 1234,
+    };
+    const cache = {
+      entries: [
+        {
+          track_ref: 'ncm:42',
+          file_path: '/cache/42.mp3',
+          size_bytes: 1024,
+          bitrate_kbps: 320,
+          last_accessed_at: 200,
+          created_at: 100,
+        },
+      ],
+      downloads: [
+        {
+          track_ref: 'ncm:43',
+          fetched_bytes: 512,
+          total_bytes: 1024,
+          started_at: 300,
+          status: 'downloading',
+        },
+      ],
+      history: [
+        {
+          track_ref: 'ncm:41',
+          fetched_bytes: 2048,
+          total_bytes: 2048,
+          started_at: 50,
+          finished_at: 60,
+          status: 'ok',
+        },
+      ],
+    };
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ track }, 201))
+      .mockResolvedValueOnce(jsonResponse(cache))
+      .mockResolvedValueOnce(jsonResponse({ evicted: 'ncm:42/part' }));
+    const client = new ApiClient(() => 'admin-token', {
+      base: 'https://yuzu.test',
+      fetchFn,
+    });
+    const file = new Blob(['audio bytes'], { type: 'audio/mpeg' });
+
+    await expect(
+      client.uploadMedia(file, { title: 'Upload', artist: 'Alice', duration_ms: 1234 }),
+    ).resolves.toEqual(track);
+    await expect(client.listCache()).resolves.toEqual(cache);
+    await expect(client.evictCache('ncm:42/part')).resolves.toBeUndefined();
+
+    const [uploadUrl, uploadInit] = fetchFn.mock.calls[0];
+    expect(uploadUrl).toBe('https://yuzu.test/api/v1/media/upload');
+    expect(uploadInit?.method).toBe('POST');
+    expect(uploadInit?.body).toBeInstanceOf(FormData);
+    expect(new Headers(uploadInit?.headers).has('Content-Type')).toBe(false);
+    expect(new Headers(uploadInit?.headers).get('Authorization')).toBe('Bearer admin-token');
+    const form = uploadInit?.body as FormData;
+    expect(form.get('file')).toBeInstanceOf(Blob);
+    expect(await (form.get('file') as Blob).text()).toBe('audio bytes');
+    expect(form.get('title')).toBe('Upload');
+    expect(form.get('artist')).toBe('Alice');
+    expect(form.get('duration_ms')).toBe('1234');
+    expect(fetchFn.mock.calls[1][0]).toBe('https://yuzu.test/api/v1/media/cache');
+    expect(fetchFn.mock.calls[2][0]).toBe(
+      'https://yuzu.test/api/v1/media/cache/ncm%3A42%2Fpart',
+    );
+    expect(fetchFn.mock.calls[2][1]?.method).toBe('DELETE');
+  });
+
+  it('sets credentials and drives provider QR login with encoded path parameters', async () => {
+    const credential = { provider: 'ncm / cloud', status: 'ok' as const };
+    const started = { key: 'qr/key + 一', qr_content: 'https://qr.test/content' };
+    const polled = { status: 'scanned' as const, message: 'confirm in app' };
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(credential))
+      .mockResolvedValueOnce(jsonResponse(started))
+      .mockResolvedValueOnce(jsonResponse(polled));
+    const client = new ApiClient(() => 'admin-token', {
+      base: 'https://yuzu.test',
+      fetchFn,
+    });
+
+    await expect(client.setCredential(credential.provider, 'MUSIC_U=secret')).resolves.toEqual(
+      credential,
+    );
+    await expect(client.qrLoginStart(credential.provider)).resolves.toEqual(started);
+    await expect(client.qrLoginPoll(credential.provider, started.key)).resolves.toEqual(polled);
+
+    const provider = 'ncm%20%2F%20cloud';
+    expect(fetchFn.mock.calls[0][0]).toBe(
+      `https://yuzu.test/api/v1/providers/${provider}/credential`,
+    );
+    expect(fetchFn.mock.calls[0][1]?.method).toBe('POST');
+    expect(JSON.parse(String(fetchFn.mock.calls[0][1]?.body))).toEqual({
+      payload: 'MUSIC_U=secret',
+    });
+    expect(fetchFn.mock.calls[1][0]).toBe(
+      `https://yuzu.test/api/v1/providers/${provider}/qrlogin`,
+    );
+    expect(fetchFn.mock.calls[1][1]?.method).toBe('POST');
+    expect(fetchFn.mock.calls[2][0]).toBe(
+      `https://yuzu.test/api/v1/providers/${provider}/qrlogin/qr%2Fkey%20%2B%20%E4%B8%80`,
+    );
+  });
+
+  it('unwraps players and sends the exact player command body', async () => {
+    const player = {
+      id: 'player / stage',
+      device: 'raspberry-pi',
+      version: '1.2.3',
+      caps: ['audio'],
+      identity_name: 'Stage',
+      room_id: 'main',
+      volume: 75,
+      muted: false,
+      connected_at: 1234,
+    };
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ players: [player] }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }));
+    const client = new ApiClient(() => 'admin-token', {
+      base: 'https://yuzu.test',
+      fetchFn,
+    });
+
+    await expect(client.listPlayers()).resolves.toEqual([player]);
+    await expect(client.playerCommand(player.id, 'join_room', 'room /一')).resolves.toEqual({
+      ok: true,
+    });
+
+    expect(fetchFn.mock.calls[0][0]).toBe('https://yuzu.test/api/v1/players');
+    expect(fetchFn.mock.calls[1][0]).toBe(
+      'https://yuzu.test/api/v1/players/player%20%2F%20stage/command',
+    );
+    expect(fetchFn.mock.calls[1][1]?.method).toBe('POST');
+    expect(JSON.parse(String(fetchFn.mock.calls[1][1]?.body))).toEqual({
+      op: 'join_room',
+      value: 'room /一',
+    });
+  });
 });

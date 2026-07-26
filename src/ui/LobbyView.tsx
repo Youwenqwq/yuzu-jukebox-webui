@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import type { RoomInfo } from '../api/types';
 import { api, client } from '../app/session';
+import { useIdentity } from './hooks';
 import ThemeControls from './ThemeControls';
 
 export default function LobbyView() {
@@ -23,6 +24,7 @@ export default function LobbyView() {
           Yuzu <em className="italic font-normal text-accent">Jukebox</em>
         </div>
         <div className="flex-1" />
+        <AdminEntry />
         <ThemeControls />
       </header>
 
@@ -49,6 +51,19 @@ export default function LobbyView() {
         {rooms?.length === 0 && <p className="text-muted">{t('lobby.noRooms')}</p>}
       </div>
     </div>
+  );
+}
+
+function AdminEntry() {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const identity = useIdentity();
+  const isAdmin = identity?.roles.some((r) => r === 'room_admin' || r === 'media_admin') ?? false;
+  if (!isAdmin) return null;
+  return (
+    <button onClick={() => navigate('/admin')} className="text-[13px] text-muted hover:text-paper">
+      {t('admin.entry')}
+    </button>
   );
 }
 

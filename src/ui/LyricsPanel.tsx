@@ -1,6 +1,11 @@
 import { useEffect, useRef, type JSX } from 'react';
 import type { LyricLine } from '../player/lyrics';
 
+/**
+ * 歌词面板：无框设计——舞台自身已是容器，面板透明嵌入。
+ * 居中排版 + 上下渐隐遮罩引导视线到当前行；active 行用展示字体放大。
+ * 高度由父容器决定（h-full）。
+ */
 export function LyricsPanel(props: {
   lines: LyricLine[];
   activeIndex: number;
@@ -24,44 +29,51 @@ export function LyricsPanel(props: {
 
   if (lines.length === 0) {
     return (
-      <div className="grid min-h-52 place-items-center rounded-lg border border-hairline bg-panel px-6 py-12 text-center text-sm text-faint">
+      <div className="grid h-full place-items-center text-center text-sm text-faint">
         {emptyText}
       </div>
     );
   }
 
   return (
-    <div className="relative overflow-hidden rounded-lg border border-hairline bg-panel shadow-[inset_0_1px_0_var(--hover)]">
-      <div className="pointer-events-none absolute inset-x-4 top-3 z-10 border-t border-dashed border-hairline" />
-      <ol className="max-h-[min(56vh,32rem)] overflow-y-auto scroll-py-[45%] px-5 py-12 sm:px-8">
-        {lines.map((line, index) => {
-          const active = index === activeIndex;
-          return (
-            <li
-              key={`${line.timeMs}:${index}`}
-              ref={(element) => {
-                lineRefs.current[index] = element;
-              }}
-              aria-current={active ? 'true' : undefined}
-              className={`relative border-l py-3 pl-5 transition-[color,font-size,opacity,transform] duration-[var(--speed)] sm:pl-7 ${
+    <ol
+      className="h-full overflow-y-auto text-center [mask-image:linear-gradient(to_bottom,transparent,black_18%,black_82%,transparent)]"
+    >
+      {/* 顶部留白，让首行能滚到视口中部 */}
+      <li aria-hidden className="h-[38%]" />
+      {lines.map((line, index) => {
+        const active = index === activeIndex;
+        const near = Math.abs(index - activeIndex) === 1;
+        return (
+          <li
+            key={`${line.timeMs}:${index}`}
+            ref={(element) => {
+              lineRefs.current[index] = element;
+            }}
+            aria-current={active ? 'true' : undefined}
+            className={`px-6 py-2 transition-colors duration-[var(--speed)] ${
+              active ? 'text-paper' : near ? 'text-muted' : 'text-faint'
+            }`}
+          >
+            <p
+              className={
                 active
-                  ? 'translate-x-1 border-accent text-base text-paper opacity-100 sm:text-lg'
-                  : 'border-hairline text-sm text-faint opacity-70'
-              }`}
+                  ? 'font-display text-lg font-semibold leading-relaxed'
+                  : 'text-[13px] leading-relaxed'
+              }
             >
-              <p className={active ? 'font-display font-semibold leading-relaxed' : 'leading-relaxed'}>
-                {line.text}
+              {line.text}
+            </p>
+            {line.translation !== undefined && (
+              <p className={`mt-0.5 leading-relaxed ${active ? 'text-[13px] text-muted' : 'text-xs'}`}>
+                {line.translation}
               </p>
-              {line.translation !== undefined && (
-                <p className={`mt-1 leading-relaxed ${active ? 'text-sm text-muted' : 'text-xs text-faint'}`}>
-                  {line.translation}
-                </p>
-              )}
-            </li>
-          );
-        })}
-      </ol>
-      <div className="pointer-events-none absolute inset-x-4 bottom-3 z-10 border-b border-dashed border-hairline" />
-    </div>
+            )}
+          </li>
+        );
+      })}
+      {/* 底部留白，让末行能滚到视口中部 */}
+      <li aria-hidden className="h-[38%]" />
+    </ol>
   );
 }

@@ -5,6 +5,7 @@ import { initTheme } from './app/theme';
 import LoginView from './ui/LoginView';
 import LobbyView from './ui/LobbyView';
 import RoomView from './ui/RoomView';
+import AdminView from './ui/AdminView';
 import { ToastProvider } from './ui/toast';
 
 initTheme();
@@ -27,6 +28,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<LobbyView />} />
           <Route path="/room/:roomId" element={<RoomView />} />
+          <Route path="/admin" element={<AdminView />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </HashRouter>
