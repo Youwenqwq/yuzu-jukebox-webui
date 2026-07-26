@@ -117,4 +117,20 @@ describe('syncMediaSession', () => {
     expect(() => syncMediaSession(playback(), 'https://jukebox.test/', {})).not.toThrow();
     expect(metadata).not.toHaveBeenCalled();
   });
+
+  // 回归：同源部署时 artworkBase 为空串，曾抛 "Invalid base URL" 阻断房间页
+  it('falls back to location.origin when artworkBase is empty', () => {
+    const mediaSession = {
+      metadata: null as FakeMediaMetadata | null,
+      playbackState: 'none' as MediaSessionPlaybackState,
+      setPositionState: vi.fn(),
+      setActionHandler: vi.fn(),
+    };
+    vi.stubGlobal('MediaMetadata', FakeMediaMetadata);
+    vi.stubGlobal('navigator', { mediaSession });
+    vi.stubGlobal('location', { origin: 'https://pages.test' });
+
+    expect(() => syncMediaSession(playback(), '', {})).not.toThrow();
+    expect(mediaSession.metadata?.init.artwork?.[0]?.src).toBe('https://pages.test/api/v1/cover/local%3Aone');
+  });
 });

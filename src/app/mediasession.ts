@@ -19,7 +19,7 @@ export function syncMediaSession(
         artist: current.artist,
         album: current.album,
         artwork: current.cover_url
-          ? [{ src: new URL(current.cover_url, artworkBase).href }]
+          ? [{ src: new URL(current.cover_url, artworkBase || location.origin).href }]
           : [],
       })
     : null;
