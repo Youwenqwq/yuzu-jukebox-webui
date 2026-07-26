@@ -552,4 +552,63 @@ describe('ApiClient', () => {
     expect(fetchFn.mock.calls[9][1]?.method).toBe('DELETE');
     expect(JSON.parse(String(fetchFn.mock.calls[9][1]?.body))).toEqual(grant);
   });
+
+  it('manages the complete Integration credential lifecycle', async () => {
+    const integration = {
+      id: 'bridge /一',
+      name: 'Bridge',
+      active: true,
+      created_at: 100,
+      updated_at: 100,
+    };
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ integration, token: 'new-token' }))
+      .mockResolvedValueOnce(
+        jsonResponse({ integration: { ...integration, name: 'Renamed', updated_at: 200 } }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          integration: { ...integration, updated_at: 300 },
+          token: 'rotated-token',
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ ok: true }));
+    const client = new ApiClient(() => 'admin-token', {
+      base: 'https://yuzu.test',
+      fetchFn,
+    });
+
+    await expect(client.createIntegration(integration.id, integration.name)).resolves.toEqual({
+      integration,
+      token: 'new-token',
+    });
+    await expect(client.updateIntegration(integration.id, { name: 'Renamed' })).resolves.toEqual({
+      ...integration,
+      name: 'Renamed',
+      updated_at: 200,
+    });
+    await expect(client.rotateIntegrationToken(integration.id)).resolves.toEqual({
+      integration: { ...integration, updated_at: 300 },
+      token: 'rotated-token',
+    });
+    await expect(client.deleteIntegration(integration.id)).resolves.toBeUndefined();
+
+    const encodedId = 'bridge%20%2F%E4%B8%80';
+    expect(fetchFn.mock.calls[0][0]).toBe('https://yuzu.test/api/v1/integrations');
+    expect(fetchFn.mock.calls[0][1]?.method).toBe('POST');
+    expect(JSON.parse(String(fetchFn.mock.calls[0][1]?.body))).toEqual({
+      id: integration.id,
+      name: integration.name,
+    });
+    expect(fetchFn.mock.calls[1][0]).toBe(
+      `https://yuzu.test/api/v1/integrations/${encodedId}`,
+    );
+    expect(fetchFn.mock.calls[1][1]?.method).toBe('PATCH');
+    expect(fetchFn.mock.calls[2][0]).toBe(
+      `https://yuzu.test/api/v1/integrations/${encodedId}/token`,
+    );
+    expect(fetchFn.mock.calls[2][1]?.method).toBe('POST');
+    expect(fetchFn.mock.calls[3][1]?.method).toBe('DELETE');
+  });
 });

@@ -12,10 +12,12 @@ import type {
   ImportPlaylistInput,
   LocalMediaInfo,
   IntegrationInfo,
+  IntegrationCredentialResult,
   IntegrationScopeBinding,
   IntegrationScopeBindingInfo,
   IntegrationSubjectLink,
   IntegrationSubjectLinkInfo,
+  UpdateIntegrationRequest,
   LyricsResult,
   MovePlaylistItemResult,
   OidcConfig,
@@ -147,6 +149,40 @@ export class ApiClient {
   async listIntegrations(): Promise<IntegrationInfo[]> {
     const result = await this.#json<{ integrations: IntegrationInfo[] }>('/api/v1/integrations');
     return result.integrations;
+  }
+
+  async createIntegration(id: string, name: string): Promise<IntegrationCredentialResult> {
+    return this.#json<IntegrationCredentialResult>('/api/v1/integrations', {
+      method: 'POST',
+      body: JSON.stringify({ id, name }),
+    });
+  }
+
+  async updateIntegration(
+    id: string,
+    update: UpdateIntegrationRequest,
+  ): Promise<IntegrationInfo> {
+    const result = await this.#json<{ integration: IntegrationInfo }>(
+      `/api/v1/integrations/${encodeURIComponent(id)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(update),
+      },
+    );
+    return result.integration;
+  }
+
+  async rotateIntegrationToken(id: string): Promise<IntegrationCredentialResult> {
+    return this.#json<IntegrationCredentialResult>(
+      `/api/v1/integrations/${encodeURIComponent(id)}/token`,
+      { method: 'POST' },
+    );
+  }
+
+  async deleteIntegration(id: string): Promise<void> {
+    await this.#json<{ ok: true }>(`/api/v1/integrations/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
   }
 
   async listIntegrationScopes(integrationId: string): Promise<IntegrationScopeBindingInfo[]> {

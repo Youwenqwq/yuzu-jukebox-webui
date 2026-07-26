@@ -213,6 +213,21 @@ export interface RoomCapabilities {
 
 export interface IntegrationInfo {
   id: string;
+  name: string;
+  active: boolean;
+  created_at: number;
+  updated_at: number;
+  last_used_at?: number;
+}
+
+export interface IntegrationCredentialResult {
+  integration: IntegrationInfo;
+  token: string;
+}
+
+export interface UpdateIntegrationRequest {
+  name?: string;
+  active?: boolean;
 }
 
 export interface IntegrationScopeBinding {

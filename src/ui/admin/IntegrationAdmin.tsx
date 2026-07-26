@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { useTranslation } from 'react-i18next';
 import type {
   IntegrationInfo,
+  IntegrationCredentialResult,
   IntegrationScopeBinding,
   IntegrationScopeBindingInfo,
   IntegrationSubjectLink,
@@ -24,6 +25,11 @@ const removeButtonClass =
   'rounded-full border border-hairline px-3 py-1 text-xs text-muted hover:border-[#D05A4E] hover:text-[#D05A4E] disabled:cursor-not-allowed disabled:opacity-40';
 
 type BusyAction =
+  | 'integration-create'
+  | 'integration-rename'
+  | 'integration-toggle'
+  | 'integration-rotate'
+  | 'integration-delete'
   | 'scope-save'
   | `scope-delete:${string}`
   | 'subject-save'
@@ -40,6 +46,10 @@ export default function IntegrationAdmin() {
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogFailed, setCatalogFailed] = useState(false);
   const [integrationId, setIntegrationId] = useState('');
+  const [newIntegrationId, setNewIntegrationId] = useState('');
+  const [newIntegrationName, setNewIntegrationName] = useState('');
+  const [integrationName, setIntegrationName] = useState('');
+  const [revealedToken, setRevealedToken] = useState<{ id: string; token: string } | null>(null);
 
   const [scopes, setScopes] = useState<IntegrationScopeBindingInfo[] | null>(null);
   const [subjects, setSubjects] = useState<IntegrationSubjectLinkInfo[] | null>(null);
@@ -177,6 +187,15 @@ export default function IntegrationAdmin() {
     () => new Map(principals.map((principal) => [principal.id, principal])),
     [principals],
   );
+  const selectedIntegration = useMemo(
+    () => integrations?.find((integration) => integration.id === integrationId) ?? null,
+    [integrationId, integrations],
+  );
+
+  useEffect(() => {
+    setIntegrationName(selectedIntegration?.name ?? '');
+    setRevealedToken((current) => (current?.id === integrationId ? current : null));
+  }, [integrationId, selectedIntegration]);
   const roomOptions = rooms.map((room) => ({
     value: room.id,
     label: t('admin.integration.nameWithId', { name: room.name, id: room.id }),
@@ -201,6 +220,103 @@ export default function IntegrationAdmin() {
       throw error;
     } finally {
       setBusy(null);
+    }
+  };
+
+  const createIntegration = async () => {
+    const id = newIntegrationId.trim();
+    const name = newIntegrationName.trim();
+    if (!id || !name) return;
+    try {
+      let result: IntegrationCredentialResult | undefined;
+      await runMutation(
+        'integration-create',
+        async () => {
+          result = await api.createIntegration(id, name);
+        },
+        t('admin.integration.created'),
+      );
+      if (!result) return;
+      setNewIntegrationId('');
+      setNewIntegrationName('');
+      await loadCatalog();
+      setIntegrationId(result.integration.id);
+      setRevealedToken({ id: result.integration.id, token: result.token });
+    } catch {
+      // Keep the form intact for correction.
+    }
+  };
+
+  const renameIntegration = async () => {
+    const name = integrationName.trim();
+    if (!selectedIntegration || !name || name === selectedIntegration.name) return;
+    try {
+      await runMutation(
+        'integration-rename',
+        () => api.updateIntegration(selectedIntegration.id, { name }),
+        t('admin.integration.renamed'),
+      );
+      await loadCatalog();
+      setIntegrationId(selectedIntegration.id);
+    } catch {
+      // Keep the edited name for correction.
+    }
+  };
+
+  const toggleIntegration = async () => {
+    if (!selectedIntegration) return;
+    try {
+      await runMutation(
+        'integration-toggle',
+        () => api.updateIntegration(selectedIntegration.id, { active: !selectedIntegration.active }),
+        selectedIntegration.active
+          ? t('admin.integration.disabled')
+          : t('admin.integration.enabled'),
+      );
+      await loadCatalog();
+      setIntegrationId(selectedIntegration.id);
+    } catch {
+      // Keep the current server state.
+    }
+  };
+
+  const rotateIntegrationToken = async () => {
+    if (!selectedIntegration) return;
+    try {
+      let result: IntegrationCredentialResult | undefined;
+      await runMutation(
+        'integration-rotate',
+        async () => {
+          result = await api.rotateIntegrationToken(selectedIntegration.id);
+        },
+        t('admin.integration.rotated'),
+      );
+      if (result) setRevealedToken({ id: result.integration.id, token: result.token });
+      await loadCatalog();
+      setIntegrationId(selectedIntegration.id);
+    } catch {
+      // Existing token remains usable when rotation fails.
+    }
+  };
+
+  const deleteIntegration = async () => {
+    if (
+      !selectedIntegration ||
+      !window.confirm(t('admin.integration.deleteConfirm', { name: selectedIntegration.name }))
+    ) {
+      return;
+    }
+    try {
+      await runMutation(
+        'integration-delete',
+        () => api.deleteIntegration(selectedIntegration.id),
+        t('admin.integration.deleted'),
+      );
+      setRevealedToken(null);
+      setIntegrationId('');
+      await loadCatalog();
+    } catch {
+      // Keep the selected Integration visible when deletion fails.
     }
   };
 
@@ -333,6 +449,35 @@ export default function IntegrationAdmin() {
         </button>
       </div>
 
+      {!catalogFailed && integrations !== null ? (
+        <IntegrationLifecyclePanel
+          integrations={integrations}
+          selected={selectedIntegration}
+          selectedId={integrationId}
+          newId={newIntegrationId}
+          newName={newIntegrationName}
+          editName={integrationName}
+          revealedToken={revealedToken}
+          busy={busy}
+          onSelect={setIntegrationId}
+          onNewIdChange={setNewIntegrationId}
+          onNewNameChange={setNewIntegrationName}
+          onEditNameChange={setIntegrationName}
+          onCreate={() => void createIntegration()}
+          onRename={() => void renameIntegration()}
+          onToggle={() => void toggleIntegration()}
+          onRotate={() => void rotateIntegrationToken()}
+          onDelete={() => void deleteIntegration()}
+          onCopyToken={() => {
+            if (!revealedToken) return;
+            void navigator.clipboard
+              .writeText(revealedToken.token)
+              .then(() => show(t('admin.integration.tokenCopied')))
+              .catch(showError);
+          }}
+        />
+      ) : null}
+
       {catalogFailed ? (
         <LoadError message={t('admin.integration.catalogFailed')} onRetry={() => void loadCatalog()} />
       ) : integrations === null ? (
@@ -341,21 +486,6 @@ export default function IntegrationAdmin() {
         <EmptyState>{t('admin.integration.integrationEmpty')}</EmptyState>
       ) : (
         <div className="grid gap-5">
-          <section className="rounded-md border border-hairline bg-panel px-4 py-3.5">
-            <div className="flex flex-wrap items-center gap-3">
-              <label className="text-xs text-muted">{t('admin.integration.integration')}</label>
-              <Select
-                value={integrationId}
-                onValueChange={setIntegrationId}
-                options={integrations.map((integration) => ({
-                  value: integration.id,
-                  label: integration.id,
-                }))}
-                className="min-w-56"
-              />
-              <span className="font-mono text-[11px] text-faint">{integrationId}</span>
-            </div>
-          </section>
 
           {integrationDataFailed ? (
             <LoadError
@@ -423,6 +553,189 @@ export default function IntegrationAdmin() {
           />
         </div>
       )}
+    </section>
+  );
+}
+
+function IntegrationLifecyclePanel(props: {
+  integrations: IntegrationInfo[];
+  selected: IntegrationInfo | null;
+  selectedId: string;
+  newId: string;
+  newName: string;
+  editName: string;
+  revealedToken: { id: string; token: string } | null;
+  busy: BusyAction | null;
+  onSelect: (value: string) => void;
+  onNewIdChange: (value: string) => void;
+  onNewNameChange: (value: string) => void;
+  onEditNameChange: (value: string) => void;
+  onCreate: () => void;
+  onRename: () => void;
+  onToggle: () => void;
+  onRotate: () => void;
+  onDelete: () => void;
+  onCopyToken: () => void;
+}) {
+  const { t } = useTranslation();
+  const {
+    integrations,
+    selected,
+    selectedId,
+    newId,
+    newName,
+    editName,
+    revealedToken,
+    busy,
+    onSelect,
+    onNewIdChange,
+    onNewNameChange,
+    onEditNameChange,
+    onCreate,
+    onRename,
+    onToggle,
+    onRotate,
+    onDelete,
+    onCopyToken,
+  } = props;
+  const working = busy !== null;
+
+  return (
+    <section className="mb-5 rounded-md border border-hairline bg-panel px-4 py-4">
+      <div>
+        <h3 className="text-sm font-semibold">{t('admin.integration.lifecycleHeading')}</h3>
+        <p className="mt-1 text-xs text-muted">{t('admin.integration.lifecycleIntro')}</p>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
+        <Field label={t('admin.integration.integrationId')}>
+          <input
+            value={newId}
+            onChange={(event) => onNewIdChange(event.target.value)}
+            placeholder={t('admin.integration.integrationIdPlaceholder')}
+            className={inputClass}
+          />
+        </Field>
+        <Field label={t('admin.integration.integrationName')}>
+          <input
+            value={newName}
+            onChange={(event) => onNewNameChange(event.target.value)}
+            placeholder={t('admin.integration.integrationNamePlaceholder')}
+            className={inputClass}
+          />
+        </Field>
+        <button
+          type="button"
+          onClick={onCreate}
+          disabled={working || !newId.trim() || !newName.trim()}
+          className={primaryButtonClass}
+        >
+          {busy === 'integration-create'
+            ? t('admin.common.working')
+            : t('admin.integration.create')}
+        </button>
+      </div>
+
+      {selected ? (
+        <div className="mt-5 border-t border-hairline pt-4">
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
+            <Field label={t('admin.integration.integration')}>
+              <Select
+                value={selectedId}
+                onValueChange={onSelect}
+                options={integrations.map((integration) => ({
+                  value: integration.id,
+                  label: `${integration.name} · ${integration.id}`,
+                }))}
+                className="mt-1.5 w-full"
+              />
+            </Field>
+            <Field label={t('admin.integration.integrationName')}>
+              <input
+                value={editName}
+                onChange={(event) => onEditNameChange(event.target.value)}
+                className={inputClass}
+              />
+            </Field>
+            <button
+              type="button"
+              onClick={onRename}
+              disabled={working || !editName.trim() || editName.trim() === selected.name}
+              className={secondaryButtonClass}
+            >
+              {busy === 'integration-rename'
+                ? t('admin.common.working')
+                : t('admin.integration.rename')}
+            </button>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <span
+              className={`rounded-full px-2.5 py-1 text-xs ${
+                selected.active
+                  ? 'bg-[#3F8B6D]/15 text-[#71B99A]'
+                  : 'bg-hairline text-muted'
+              }`}
+            >
+              {selected.active
+                ? t('admin.integration.statusActive')
+                : t('admin.integration.statusDisabled')}
+            </span>
+            <span className="mr-auto font-mono text-[11px] text-faint">{selected.id}</span>
+            <button
+              type="button"
+              onClick={onToggle}
+              disabled={working}
+              className={secondaryButtonClass}
+            >
+              {busy === 'integration-toggle'
+                ? t('admin.common.working')
+                : selected.active
+                  ? t('admin.integration.disable')
+                  : t('admin.integration.enable')}
+            </button>
+            <button
+              type="button"
+              onClick={onRotate}
+              disabled={working}
+              className={secondaryButtonClass}
+            >
+              {busy === 'integration-rotate'
+                ? t('admin.common.working')
+                : t('admin.integration.rotateToken')}
+            </button>
+            <button
+              type="button"
+              onClick={onDelete}
+              disabled={working}
+              className={removeButtonClass}
+            >
+              {busy === 'integration-delete'
+                ? t('admin.common.working')
+                : t('admin.integration.delete')}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {revealedToken ? (
+        <div className="mt-4 rounded-md border border-[#D7A94A]/40 bg-[#D7A94A]/8 p-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold text-paper">
+                {t('admin.integration.tokenOnce', { id: revealedToken.id })}
+              </p>
+              <p className="mt-1 text-xs text-muted">{t('admin.integration.tokenWarning')}</p>
+            </div>
+            <button type="button" onClick={onCopyToken} className={secondaryButtonClass}>
+              {t('admin.integration.copyToken')}
+            </button>
+          </div>
+          <code className="mt-3 block select-all break-all rounded bg-canvas px-3 py-2 text-xs text-paper">
+            {revealedToken.token}
+          </code>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -824,6 +1137,15 @@ function ManagementPanel(props: { title: string; intro: string; children: ReactN
       </header>
       {props.children}
     </section>
+  );
+}
+
+function Field(props: { label: string; children: ReactNode }) {
+  return (
+    <label className="block text-xs text-muted">
+      {props.label}
+      {props.children}
+    </label>
   );
 }
 
