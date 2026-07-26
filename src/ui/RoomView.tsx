@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef, useState } from 'react';
+import { useEffect, useReducer, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import { YuzuError } from '../protocol/types';
@@ -37,6 +37,25 @@ export default function RoomView() {
   const [passwordInput, setPasswordInput] = useState('');
   const { show, showError } = useToast();
 
+  // 控制权限由服务端按当前 Principal 与 Room grant 计算。加载中或查询失败都保持 false，
+  // 避免先展示服务端会拒绝的控制入口。
+  const [canControl, setCanControl] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    setCanControl(false);
+    api
+      .roomCapabilities(roomId)
+      .then((capabilities) => {
+        if (!cancelled) setCanControl(capabilities.controller);
+      })
+      .catch(() => {
+        if (!cancelled) setCanControl(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [roomId]);
+
   // 音频渲染内核：组合根单例，播放状态完全由服务端驱动。
   // 离房时 cleanup 渲染空闲态停止播放，避免旧实例残留发声。
 
@@ -44,12 +63,12 @@ export default function RoomView() {
     renderer.render(state.playback);
   }, [renderer, state.playback]);
 
-  // 系统媒体会话（锁屏控制）；播放控制动作仅 room_admin 注入
+  // 系统媒体会话控制与页面按钮使用同一个服务端 capability。
   useEffect(() => {
     syncMediaSession(
       state.playback,
       httpBase,
-      isAdminRef.current
+      canControl
         ? {
             onPlay: () => void roomStore.resume().catch(() => {}),
             onPause: () => void roomStore.pause().catch(() => {}),
@@ -57,7 +76,7 @@ export default function RoomView() {
           }
         : {},
     );
-  }, [state.playback]);
+  }, [canControl, state.playback]);
 
   useEffect(() => {
     const id = setInterval(() => renderer.tick(), 1000);
@@ -98,9 +117,7 @@ export default function RoomView() {
     };
   }, [roomId, joinPassword]);
 
-  const isAdmin = identity?.roles.includes('room_admin') ?? false;
-  const isAdminRef = useRef(isAdmin);
-  isAdminRef.current = isAdmin;
+  const isRoomAdmin = identity?.roles.includes('room_admin') ?? false;
   const current = state.playback.current;
 
   // 歌词数据：换曲目重新拉取；舞台小预览与全屏播放页共享同一份
@@ -178,19 +195,25 @@ export default function RoomView() {
           <div className="min-w-0">
             <Stage
               playback={state.playback}
-              isAdmin={isAdmin}
+              canControl={canControl}
               nameOf={nameOf}
               lyrics={lyrics}
               lyricsLoading={lyricsLoading}
               onExpand={() => setPlayerOpen(true)}
             />
             <ListenersBar />
-            {isAdmin && <RoomAdminPanel roomId={roomId} radio={state.radio} />}
+            {canControl && (
+              <RoomAdminPanel
+                roomId={roomId}
+                radio={state.radio}
+                canManagePolicy={isRoomAdmin}
+              />
+            )}
           </div>
           <QueuePanel
             queue={state.queue}
             identityId={identity?.id ?? ''}
-            isAdmin={isAdmin}
+            canControl={canControl}
             radio={state.radio}
             nameOf={nameOf}
             onToast={show}
@@ -202,7 +225,7 @@ export default function RoomView() {
       {playerOpen && current && (
         <FullscreenPlayer
           playback={state.playback}
-          isAdmin={isAdmin}
+          canControl={canControl}
           nameOf={nameOf}
           lines={lyrics}
           lyricsLoading={lyricsLoading}
@@ -219,14 +242,14 @@ type NameOf = (id: string, snapshot?: string) => string;
 
 function Stage({
   playback,
-  isAdmin,
+  canControl,
   nameOf,
   lyrics,
   lyricsLoading,
   onExpand,
 }: {
   playback: Playback;
-  isAdmin: boolean;
+  canControl: boolean;
   nameOf: NameOf;
   lyrics: LyricLine[] | null;
   lyricsLoading: boolean;
@@ -315,7 +338,7 @@ function Stage({
       )}
 
       <div className="relative flex items-center gap-1.5 mt-5">
-        {isAdmin && (
+        {canControl && (
           <>
             <button
               title={playback.playing ? t('room.pause') : t('room.resume')}
@@ -356,7 +379,7 @@ function Stage({
         <div
           className="h-[3px] rounded bg-[var(--rail)] overflow-hidden cursor-pointer"
           onClick={(e) => {
-            if (!isAdmin || current.duration_ms <= 0) return;
+            if (!canControl || current.duration_ms <= 0) return;
             const rect = e.currentTarget.getBoundingClientRect();
             const ratio = (e.clientX - rect.left) / rect.width;
             void roomStore.seek(Math.round(ratio * current.duration_ms)).catch(() => {});
@@ -397,7 +420,7 @@ function ListenersBar() {
 function QueuePanel({
   queue,
   identityId,
-  isAdmin,
+  canControl,
   radio,
   nameOf,
   onToast,
@@ -405,7 +428,7 @@ function QueuePanel({
 }: {
   queue: QueueEntry[];
   identityId: string;
-  isAdmin: boolean;
+  canControl: boolean;
   radio: RadioState | null;
   nameOf: NameOf;
   onToast: (msg: string) => void;
@@ -458,17 +481,17 @@ function QueuePanel({
       ) : (
         queue.map((entry, i) => (
           <div key={entry.entry_id}>
-            {isAdmin && dropSlot === i && <div className="h-0.5 bg-accent mx-2 rounded" />}
+            {canControl && dropSlot === i && <div className="h-0.5 bg-accent mx-2 rounded" />}
             <Ticket
               entry={entry}
               index={i + 1}
               mine={entry.requested_by === identityId}
-              isAdmin={isAdmin}
+              canControl={canControl}
               nameOf={nameOf}
               onError={onError}
               dragging={dragIndex === i}
               dnd={
-                isAdmin
+                canControl
                   ? {
                       onDragStart: (e) => {
                         setDragIndex(i);
@@ -492,7 +515,7 @@ function QueuePanel({
           </div>
         ))
       )}
-      {isAdmin && dropSlot === queue.length && queue.length > 0 && (
+      {canControl && dropSlot === queue.length && queue.length > 0 && (
         <div className="h-0.5 bg-accent mx-2 rounded" />
       )}
 
@@ -505,7 +528,7 @@ function Ticket({
   entry,
   index,
   mine,
-  isAdmin,
+  canControl,
   nameOf,
   onError,
   dragging,
@@ -514,7 +537,7 @@ function Ticket({
   entry: QueueEntry;
   index: number;
   mine: boolean;
-  isAdmin: boolean;
+  canControl: boolean;
   nameOf: NameOf;
   onError: (err: unknown) => void;
   dragging?: boolean;
@@ -526,7 +549,7 @@ function Ticket({
   };
 }) {
   const { t } = useTranslation();
-  const canRemove = mine || isAdmin;
+  const canRemove = mine || canControl;
   const requesterName = nameOf(entry.requested_by, entry.requester_name);
   return (
     <div
@@ -555,7 +578,7 @@ function Ticket({
         <span className="font-mono text-[11.5px] text-muted tabular-nums">{formatMs(entry.duration_ms)}</span>
         {canRemove && (
           <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
-            {isAdmin && <span className="text-faint px-1" title={t('room.moveAdmin')}>≡</span>}
+            {canControl && <span className="text-faint px-1" title={t('room.moveAdmin')}>≡</span>}
             <button
               title={mine ? t('room.removeOwn') : t('room.removeAdmin')}
               onClick={() => void roomStore.removeQueue(entry.entry_id).catch(onError)}

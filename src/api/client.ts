@@ -11,6 +11,11 @@ import type {
   HistoryEntry,
   ImportPlaylistInput,
   LocalMediaInfo,
+  IntegrationInfo,
+  IntegrationScopeBinding,
+  IntegrationScopeBindingInfo,
+  IntegrationSubjectLink,
+  IntegrationSubjectLinkInfo,
   LyricsResult,
   MovePlaylistItemResult,
   OidcConfig,
@@ -21,8 +26,11 @@ import type {
   PlaylistInfo,
   ProviderInfo,
   PruneResult,
+  PrincipalInfo,
   QrLoginPollResult,
   QrLoginStartResult,
+  RoomCapabilities,
+  RoomControllerGrant,
   RoomInfo,
   RoomMutationResult,
   SearchTrack,
@@ -127,6 +135,142 @@ export class ApiClient {
     await this.#json<{ ok: true }>(`/api/v1/rooms/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
+  }
+
+  async roomCapabilities(id: string): Promise<RoomCapabilities> {
+    const result = await this.#json<{ capabilities: RoomCapabilities }>(
+      `/api/v1/rooms/${encodeURIComponent(id)}/capabilities`,
+    );
+    return result.capabilities;
+  }
+
+  async listIntegrations(): Promise<IntegrationInfo[]> {
+    const result = await this.#json<{ integrations: IntegrationInfo[] }>('/api/v1/integrations');
+    return result.integrations;
+  }
+
+  async listIntegrationScopes(integrationId: string): Promise<IntegrationScopeBindingInfo[]> {
+    const result = await this.#json<{ scopes: IntegrationScopeBindingInfo[] }>(
+      `/api/v1/integrations/${encodeURIComponent(integrationId)}/scopes`,
+    );
+    return result.scopes;
+  }
+
+  async bindIntegrationScope(
+    integrationId: string,
+    binding: IntegrationScopeBinding,
+  ): Promise<IntegrationScopeBindingInfo> {
+    const result = await this.#json<{ scope: IntegrationScopeBindingInfo }>(
+      `/api/v1/integrations/${encodeURIComponent(integrationId)}/scopes`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(binding),
+      },
+    );
+    return result.scope;
+  }
+
+  async unbindIntegrationScope(
+    integrationId: string,
+    binding: IntegrationScopeBinding,
+  ): Promise<void> {
+    await this.#json<{ ok: true }>(
+      `/api/v1/integrations/${encodeURIComponent(integrationId)}/scopes`,
+      {
+        method: 'DELETE',
+        body: JSON.stringify(binding),
+      },
+    );
+  }
+
+  async listIntegrationSubjects(integrationId: string): Promise<IntegrationSubjectLinkInfo[]> {
+    const result = await this.#json<{ subjects: IntegrationSubjectLinkInfo[] }>(
+      `/api/v1/integrations/${encodeURIComponent(integrationId)}/subjects`,
+    );
+    return result.subjects;
+  }
+
+  async linkIntegrationSubject(
+    integrationId: string,
+    link: IntegrationSubjectLink,
+  ): Promise<IntegrationSubjectLinkInfo> {
+    const result = await this.#json<{ subject: IntegrationSubjectLinkInfo }>(
+      `/api/v1/integrations/${encodeURIComponent(integrationId)}/subjects`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(link),
+      },
+    );
+    return result.subject;
+  }
+
+  async unlinkIntegrationSubject(
+    integrationId: string,
+    link: IntegrationSubjectLink,
+  ): Promise<void> {
+    await this.#json<{ ok: true }>(
+      `/api/v1/integrations/${encodeURIComponent(integrationId)}/subjects`,
+      {
+        method: 'DELETE',
+        body: JSON.stringify(link),
+      },
+    );
+  }
+
+  async listPrincipals(query?: string, limit?: number): Promise<PrincipalInfo[]> {
+    const params = new URLSearchParams();
+    if (query) {
+      params.set('q', query);
+    }
+    if (limit !== undefined && limit > 0) {
+      params.set('limit', String(limit));
+    }
+    const suffix = params.size === 0 ? '' : `?${params}`;
+    const result = await this.#json<{ principals: PrincipalInfo[] }>(
+      `/api/v1/principals${suffix}`,
+    );
+    return result.principals;
+  }
+
+  async listRoomGrants(roomId: string): Promise<RoomControllerGrant[]> {
+    const result = await this.#json<{ grants: RoomControllerGrant[] }>(
+      `/api/v1/rooms/${encodeURIComponent(roomId)}/grants`,
+    );
+    return result.grants;
+  }
+
+  async grantRoomController(
+    roomId: string,
+    principalId: string,
+  ): Promise<RoomControllerGrant> {
+    const grant: RoomControllerGrant = {
+      room_id: roomId,
+      principal_id: principalId,
+      capability: 'controller',
+    };
+    const result = await this.#json<{ grant: RoomControllerGrant }>(
+      `/api/v1/rooms/${encodeURIComponent(roomId)}/grants/${encodeURIComponent(principalId)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(grant),
+      },
+    );
+    return result.grant;
+  }
+
+  async revokeRoomController(roomId: string, principalId: string): Promise<void> {
+    const grant: RoomControllerGrant = {
+      room_id: roomId,
+      principal_id: principalId,
+      capability: 'controller',
+    };
+    await this.#json<{ ok: true }>(
+      `/api/v1/rooms/${encodeURIComponent(roomId)}/grants/${encodeURIComponent(principalId)}`,
+      {
+        method: 'DELETE',
+        body: JSON.stringify(grant),
+      },
+    );
   }
 
   async roomHistory(id: string, offset?: number, limit?: number): Promise<HistoryEntry[]> {

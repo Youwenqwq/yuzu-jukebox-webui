@@ -469,4 +469,87 @@ describe('ApiClient', () => {
       value: 'room /一',
     });
   });
+
+  it('consumes capabilities and integration management wire contracts', async () => {
+    const scope = {
+      adapter_id: 'onebot/v11',
+      scope_type: 'group',
+      scope_id: 'group/42',
+      room_id: 'room /一',
+    };
+    const subject = {
+      adapter_id: scope.adapter_id,
+      scope_type: scope.scope_type,
+      scope_id: scope.scope_id,
+      subject_id: 'user/7',
+      principal_id: 'principal /七',
+    };
+    const grant = {
+      room_id: scope.room_id,
+      principal_id: subject.principal_id,
+      capability: 'controller' as const,
+    };
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ capabilities: { controller: true } }))
+      .mockResolvedValueOnce(jsonResponse({ integrations: [{ id: 'bridge /一' }] }))
+      .mockResolvedValueOnce(jsonResponse({ scopes: [{ integration_id: 'bridge /一', ...scope }] }))
+      .mockResolvedValueOnce(jsonResponse({ subjects: [{ integration_id: 'bridge /一', ...subject }] }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          principals: [
+            { id: subject.principal_id, name: '柚子', kind: 'oidc', roles: [], active: true },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ grants: [grant] }))
+      .mockResolvedValueOnce(jsonResponse({ scope: { integration_id: 'bridge /一', ...scope } }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }))
+      .mockResolvedValueOnce(jsonResponse({ grant }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }));
+    const client = new ApiClient(() => 'admin-token', {
+      base: 'https://yuzu.test',
+      fetchFn,
+    });
+
+    await expect(client.roomCapabilities(scope.room_id)).resolves.toEqual({ controller: true });
+    await expect(client.listIntegrations()).resolves.toEqual([{ id: 'bridge /一' }]);
+    await expect(client.listIntegrationScopes('bridge /一')).resolves.toEqual([
+      { integration_id: 'bridge /一', ...scope },
+    ]);
+    await expect(client.listIntegrationSubjects('bridge /一')).resolves.toEqual([
+      { integration_id: 'bridge /一', ...subject },
+    ]);
+    await expect(client.listPrincipals('柚 子', 25)).resolves.toHaveLength(1);
+    await expect(client.listRoomGrants(scope.room_id)).resolves.toEqual([grant]);
+    await expect(client.bindIntegrationScope('bridge /一', scope)).resolves.toEqual({
+      integration_id: 'bridge /一',
+      ...scope,
+    });
+    await expect(client.unlinkIntegrationSubject('bridge /一', subject)).resolves.toBeUndefined();
+    await expect(
+      client.grantRoomController(scope.room_id, subject.principal_id),
+    ).resolves.toEqual(grant);
+    await expect(
+      client.revokeRoomController(scope.room_id, subject.principal_id),
+    ).resolves.toBeUndefined();
+
+    expect(fetchFn.mock.calls[0][0]).toBe(
+      'https://yuzu.test/api/v1/rooms/room%20%2F%E4%B8%80/capabilities',
+    );
+    expect(fetchFn.mock.calls[2][0]).toBe(
+      'https://yuzu.test/api/v1/integrations/bridge%20%2F%E4%B8%80/scopes',
+    );
+    expect(fetchFn.mock.calls[4][0]).toBe(
+      'https://yuzu.test/api/v1/principals?q=%E6%9F%9A+%E5%AD%90&limit=25',
+    );
+    expect(fetchFn.mock.calls[6][1]?.method).toBe('PUT');
+    expect(JSON.parse(String(fetchFn.mock.calls[6][1]?.body))).toEqual(scope);
+    expect(fetchFn.mock.calls[7][1]?.method).toBe('DELETE');
+    expect(JSON.parse(String(fetchFn.mock.calls[7][1]?.body))).toEqual(subject);
+    expect(fetchFn.mock.calls[8][1]?.method).toBe('PUT');
+    expect(JSON.parse(String(fetchFn.mock.calls[8][1]?.body))).toEqual(grant);
+    expect(fetchFn.mock.calls[9][1]?.method).toBe('DELETE');
+    expect(JSON.parse(String(fetchFn.mock.calls[9][1]?.body))).toEqual(grant);
+  });
 });

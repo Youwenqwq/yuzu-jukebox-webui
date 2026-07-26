@@ -40,7 +40,15 @@ const END_REASON_KEYS: Record<string, string> = {
   skipped: 'roomAdmin.historyReasonSkipped',
 };
 
-export function RoomAdminPanel({ roomId, radio }: { roomId: string; radio: RadioState | null }) {
+export function RoomAdminPanel({
+  roomId,
+  radio,
+  canManagePolicy,
+}: {
+  roomId: string;
+  radio: RadioState | null;
+  canManagePolicy: boolean;
+}) {
   const { t } = useTranslation();
   const { show, showError } = useToast();
   const [open, setOpen] = useState(false);
@@ -163,7 +171,7 @@ export function RoomAdminPanel({ roomId, radio }: { roomId: string; radio: Radio
 
       {open && (
         <div className="border-t border-hairline px-4.5 py-4">
-          <div className="grid gap-4 xl:grid-cols-2">
+          <div className={`grid gap-4 ${canManagePolicy ? 'xl:grid-cols-2' : ''}`}>
             <section className="rounded-md border border-hairline bg-panel-2 p-4">
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
@@ -288,6 +296,7 @@ export function RoomAdminPanel({ roomId, radio }: { roomId: string; radio: Radio
               </form>
             </section>
 
+            {canManagePolicy && (
             <section className="rounded-md border border-hairline bg-panel-2 p-4">
               <h2 className="font-display text-lg font-semibold">{t('roomAdmin.policyTitle')}</h2>
               {loading ? (
@@ -421,6 +430,7 @@ export function RoomAdminPanel({ roomId, radio }: { roomId: string; radio: Radio
                 </form>
               )}
             </section>
+            )}
           </div>
 
           <section className="mt-4 rounded-md border border-hairline bg-panel-2 p-4">

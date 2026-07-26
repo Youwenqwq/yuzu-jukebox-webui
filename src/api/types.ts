@@ -207,6 +207,51 @@ export interface PlayerCommandResult {
   ok: true;
 }
 
+export interface RoomCapabilities {
+  controller: boolean;
+}
+
+export interface IntegrationInfo {
+  id: string;
+}
+
+export interface IntegrationScopeBinding {
+  adapter_id: string;
+  scope_type: string;
+  scope_id: string;
+  room_id: string;
+}
+
+export interface IntegrationScopeBindingInfo extends IntegrationScopeBinding {
+  integration_id: string;
+}
+
+export interface IntegrationSubjectLink {
+  adapter_id: string;
+  scope_type: string;
+  scope_id: string;
+  subject_id: string;
+  principal_id: string;
+}
+
+export interface IntegrationSubjectLinkInfo extends IntegrationSubjectLink {
+  integration_id: string;
+}
+
+export interface PrincipalInfo {
+  id: string;
+  name: string;
+  kind: string;
+  roles: string[];
+  active: boolean;
+}
+
+export interface RoomControllerGrant {
+  room_id: string;
+  principal_id: string;
+  capability: 'controller';
+}
+
 export interface LyricsResult {
   type: 'lrc';
   lrc: string;

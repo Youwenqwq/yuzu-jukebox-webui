@@ -18,13 +18,13 @@ type NameOf = (id: string, snapshot?: string) => string;
  */
 export function FullscreenPlayer(props: {
   playback: Playback;
-  isAdmin: boolean;
+  canControl: boolean;
   nameOf: NameOf;
   lines: LyricLine[] | null;
   lyricsLoading: boolean;
   onClose: () => void;
 }): JSX.Element {
-  const { playback, isAdmin, nameOf, lines, lyricsLoading, onClose } = props;
+  const { playback, canControl, nameOf, lines, lyricsLoading, onClose } = props;
   const { t } = useTranslation();
   const current = playback.current!; // 挂载方保证 current 非空
 
@@ -111,7 +111,7 @@ export function FullscreenPlayer(props: {
           <div
             className="h-[3px] rounded bg-[var(--rail)] overflow-hidden cursor-pointer mt-6"
             onClick={(e) => {
-              if (!isAdmin || current.duration_ms <= 0) return;
+              if (!canControl || current.duration_ms <= 0) return;
               const rect = e.currentTarget.getBoundingClientRect();
               const ratio = (e.clientX - rect.left) / rect.width;
               void roomStore.seek(Math.round(ratio * current.duration_ms)).catch(() => {});
@@ -128,7 +128,7 @@ export function FullscreenPlayer(props: {
           </div>
 
           <div className="flex items-center gap-2 mt-5">
-            {isAdmin && (
+            {canControl && (
               <>
                 <button
                   title={playback.playing ? t('room.pause') : t('room.resume')}
