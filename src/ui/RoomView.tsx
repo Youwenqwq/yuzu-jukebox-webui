@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import { YuzuError } from '../protocol/types';
 import type { Playback, QueueEntry, RadioState } from '../protocol/types';
-import type { SearchTrack } from '../api/types';
 import { httpBase } from '../config';
 import { api, client, roomStore, setLastRoom } from '../app/session';
 import { IDLE_PLAYBACK, audio, renderer } from '../app/player';
@@ -13,6 +12,7 @@ import { useConnStatus, useIdentity, useRoomState } from './hooks';
 import { formatClock, formatMs } from './format';
 import { extractGlowColors } from './glow';
 import { LyricsPanel } from './LyricsPanel';
+import { BatchAddPanel } from './BatchAddPanel';
 import { useToast } from './toast';
 
 /** 由五元组 + 校时时钟推算"此刻应该放到哪"（spec §2.2） */
@@ -381,6 +381,26 @@ function QueuePanel({
   const { t } = useTranslation();
   const [searchOpen, setSearchOpen] = useState(false);
 
+  // 拖拽排序（room_admin）：dragIndex = 被拖条目序号，dropSlot = 插入缝（0..N）
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dropSlot, setDropSlot] = useState<number | null>(null);
+
+  const dropAt = (slot: number) => {
+    if (dragIndex === null) return;
+    const entry = queue[dragIndex];
+    setDragIndex(null);
+    setDropSlot(null);
+    if (!entry || slot === dragIndex || slot === dragIndex + 1) return; // 落回原位
+    // 服务端 to_index = 删除该条目后的插入位（0-based）：向下拖要减 1
+    const toIndex = slot < dragIndex ? slot : slot - 1;
+    void roomStore.moveQueue(entry.entry_id, toIndex).catch(onError);
+  };
+
+  const endDrag = () => {
+    setDragIndex(null);
+    setDropSlot(null);
+  };
+
   return (
     <div className="bg-panel border border-hairline rounded-lg">
       <header className="flex items-baseline justify-between px-4.5 py-3.5 border-b border-hairline">
@@ -397,23 +417,50 @@ function QueuePanel({
         >
           {t('room.addSong')}
         </button>
-        {searchOpen && <SearchPanel onToast={onToast} onError={onError} />}
+        {searchOpen && <BatchAddPanel onToast={onToast} onError={onError} />}
       </div>
 
       {queue.length === 0 ? (
         <p className="px-4.5 py-8 text-center text-muted text-sm">{t('room.queueEmpty')}</p>
       ) : (
         queue.map((entry, i) => (
-          <Ticket
-            key={entry.entry_id}
-            entry={entry}
-            index={i + 1}
-            mine={entry.requested_by === identityId}
-            isAdmin={isAdmin}
-            nameOf={nameOf}
-            onError={onError}
-          />
+          <div key={entry.entry_id}>
+            {isAdmin && dropSlot === i && <div className="h-0.5 bg-accent mx-2 rounded" />}
+            <Ticket
+              entry={entry}
+              index={i + 1}
+              mine={entry.requested_by === identityId}
+              isAdmin={isAdmin}
+              nameOf={nameOf}
+              onError={onError}
+              dragging={dragIndex === i}
+              dnd={
+                isAdmin
+                  ? {
+                      onDragStart: (e) => {
+                        setDragIndex(i);
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('text/plain', entry.entry_id);
+                      },
+                      onDragOver: (e) => {
+                        e.preventDefault();
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setDropSlot(e.clientY < rect.top + rect.height / 2 ? i : i + 1);
+                      },
+                      onDrop: (e) => {
+                        e.preventDefault();
+                        dropAt(dropSlot ?? i);
+                      },
+                      onDragEnd: endDrag,
+                    }
+                  : undefined
+              }
+            />
+          </div>
         ))
+      )}
+      {isAdmin && dropSlot === queue.length && queue.length > 0 && (
+        <div className="h-0.5 bg-accent mx-2 rounded" />
       )}
 
       {radio && <div className="px-4.5 py-2.5 text-xs text-faint border-t border-dashed border-hairline">{t('room.radioNote')}</div>}
@@ -428,6 +475,8 @@ function Ticket({
   isAdmin,
   nameOf,
   onError,
+  dragging,
+  dnd,
 }: {
   entry: QueueEntry;
   index: number;
@@ -435,13 +484,25 @@ function Ticket({
   isAdmin: boolean;
   nameOf: NameOf;
   onError: (err: unknown) => void;
+  dragging?: boolean;
+  dnd?: {
+    onDragStart: (e: React.DragEvent) => void;
+    onDragOver: (e: React.DragEvent) => void;
+    onDrop: (e: React.DragEvent) => void;
+    onDragEnd: () => void;
+  };
 }) {
   const { t } = useTranslation();
   const canRemove = mine || isAdmin;
   const requesterName = nameOf(entry.requested_by, entry.requester_name);
   return (
     <div
-      className={`group grid grid-cols-[34px_1fr_auto] gap-3 px-4.5 py-3 border-b border-hairline last:border-b-0 hover:bg-panel-2 ${mine ? 'shadow-[inset_2px_0_0_var(--accent)]' : ''}`}
+      draggable={dnd !== undefined}
+      onDragStart={dnd?.onDragStart}
+      onDragOver={dnd?.onDragOver}
+      onDrop={dnd?.onDrop}
+      onDragEnd={dnd?.onDragEnd}
+      className={`group grid grid-cols-[34px_1fr_auto] gap-3 px-4.5 py-3 border-b border-hairline last:border-b-0 hover:bg-panel-2 ${mine ? 'shadow-[inset_2px_0_0_var(--accent)]' : ''} ${dnd ? 'cursor-grab active:cursor-grabbing' : ''} ${dragging ? 'opacity-40' : ''}`}
     >
       <span className="font-mono text-xs text-faint pt-1 tabular-nums">{String(index).padStart(2, '0')}</span>
       <div className="min-w-0">
@@ -460,102 +521,19 @@ function Ticket({
       <div className="flex flex-col items-end justify-between">
         <span className="font-mono text-[11.5px] text-muted tabular-nums">{formatMs(entry.duration_ms)}</span>
         {canRemove && (
-          <button
-            title={mine ? t('room.removeOwn') : t('room.removeAdmin')}
-            onClick={() => void roomStore.removeQueue(entry.entry_id).catch(onError)}
-            className="text-faint hover:text-[#D05A4E] opacity-0 group-hover:opacity-100 transition-opacity px-1"
-          >
-            ×
-          </button>
+          <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+            {isAdmin && <span className="text-faint px-1" title={t('room.moveAdmin')}>≡</span>}
+            <button
+              title={mine ? t('room.removeOwn') : t('room.removeAdmin')}
+              onClick={() => void roomStore.removeQueue(entry.entry_id).catch(onError)}
+              className="text-faint hover:text-[#D05A4E] px-1"
+            >
+              ×
+            </button>
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-function SearchPanel({ onToast, onError }: { onToast: (msg: string) => void; onError: (err: unknown) => void }) {
-  const { t } = useTranslation();
-  const [providers, setProviders] = useState<string[]>([]);
-  const [provider, setProvider] = useState('');
-  const [q, setQ] = useState('');
-  const [results, setResults] = useState<SearchTrack[] | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    api
-      .listProviders()
-      .then((list) => {
-        const ids = list.map((p) => p.id);
-        setProviders(ids);
-        if (ids.length > 0) setProvider((cur) => cur || ids[0]);
-      })
-      .catch(() => {});
-  }, []);
-
-  const run = () => {
-    if (!q.trim() || !provider) return;
-    setBusy(true);
-    api
-      .search(provider, q.trim())
-      .then(setResults)
-      .catch(() => setResults([]))
-      .finally(() => setBusy(false));
-  };
-
-  return (
-    <div className="mt-3">
-      <div className="flex gap-2">
-        {providers.length > 1 && (
-          <select
-            value={provider}
-            onChange={(e) => setProvider(e.target.value)}
-            className="bg-panel-2 border border-hairline rounded-md px-2 text-xs"
-          >
-            {providers.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
-        )}
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && run()}
-          placeholder={t('search.placeholder')}
-          className="flex-1 min-w-0 bg-panel-2 border border-hairline rounded-md px-3 py-1.5 text-[13px] placeholder:text-faint"
-        />
-        <button onClick={run} disabled={busy} className="text-accent text-[13px] px-2 disabled:opacity-40">
-          {t('search.submit')}
-        </button>
-      </div>
-
-      {results && (
-        <div className="mt-2 max-h-72 overflow-y-auto">
-          {results.length === 0 && <p className="text-xs text-faint py-3 text-center">{t('search.empty')}</p>}
-          {results.map((track) => (
-            <div key={track.track_ref} className="flex items-center gap-2.5 py-2 border-b border-hairline last:border-b-0">
-              <div className="min-w-0 flex-1">
-                <div className="text-[13px] truncate">{track.title}</div>
-                <div className="text-[11px] text-muted truncate">{track.artist}</div>
-              </div>
-              <span className="font-mono text-[11px] text-faint tabular-nums">{formatMs(track.duration_ms)}</span>
-              <button
-                onClick={() =>
-                  void roomStore
-                    .addQueue([track.track_ref])
-                    .then(() => onToast(t('room.addedToast', { title: track.title })))
-                    .catch(onError)
-                }
-                className="text-accent text-lg leading-none px-1.5 hover:brightness-110"
-                title={t('search.add')}
-              >
-                +
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}

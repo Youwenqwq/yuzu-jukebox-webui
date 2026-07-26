@@ -1,7 +1,15 @@
 import { httpBase } from '../config';
 import type { AuthOk } from '../protocol/types';
 import { YuzuError } from '../protocol/types';
-import type { LyricsResult, OidcConfig, ProviderInfo, RoomInfo, SearchTrack } from './types';
+import type {
+  LyricsResult,
+  OidcConfig,
+  PlaylistDetail,
+  PlaylistInfo,
+  ProviderInfo,
+  RoomInfo,
+  SearchTrack,
+} from './types';
 
 interface ApiClientOptions {
   base?: string;
@@ -79,6 +87,16 @@ export class ApiClient {
   async listProviders(): Promise<ProviderInfo[]> {
     const result = await this.#json<{ providers: ProviderInfo[] }>('/api/v1/providers');
     return result.providers;
+  }
+
+  async listPlaylists(): Promise<PlaylistInfo[]> {
+    const result = await this.#json<{ playlists: PlaylistInfo[] }>('/api/v1/playlists');
+    return result.playlists;
+  }
+
+  async getPlaylist(id: string, offset = 0, limit = 50): Promise<PlaylistDetail> {
+    const query = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+    return this.#json<PlaylistDetail>(`/api/v1/playlists/${encodeURIComponent(id)}?${query}`);
   }
 
   async lyrics(trackRef: string): Promise<LyricsResult | null> {

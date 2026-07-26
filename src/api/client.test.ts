@@ -127,4 +127,51 @@ describe('ApiClient', () => {
     await expect(client.logout()).resolves.toBeUndefined();
     expect(onUnauthorized).toHaveBeenCalledOnce();
   });
+
+  it('unwraps playlists and requests playlist detail with pagination', async () => {
+    const playlist = {
+      id: '晚 风/精选',
+      name: '晚风精选',
+      description: '夜里的歌',
+      created_by: 'g_alice',
+      created_at: 1_700_000_000_000,
+      updated_at: 1_700_000_001_000,
+      track_count: 75,
+    };
+    const item = {
+      ord: 1,
+      track_ref: 'ncm:42',
+      title: 'Song',
+      artist: 'Artist',
+      duration_ms: 123_000,
+      added_at: 1_700_000_002_000,
+    };
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ playlists: [playlist] }))
+      .mockResolvedValueOnce(jsonResponse({ playlist, items: [item], offset: 0, limit: 50 }))
+      .mockResolvedValueOnce(jsonResponse({ playlist, items: [item], offset: 50, limit: 25 }));
+    const client = new ApiClient(() => 'token', { base: 'https://yuzu.test', fetchFn });
+
+    await expect(client.listPlaylists()).resolves.toEqual([playlist]);
+    await expect(client.getPlaylist(playlist.id)).resolves.toEqual({
+      playlist,
+      items: [item],
+      offset: 0,
+      limit: 50,
+    });
+    await expect(client.getPlaylist(playlist.id, 50, 25)).resolves.toEqual({
+      playlist,
+      items: [item],
+      offset: 50,
+      limit: 25,
+    });
+    expect(fetchFn.mock.calls[0][0]).toBe('https://yuzu.test/api/v1/playlists');
+    expect(fetchFn.mock.calls[1][0]).toBe(
+      'https://yuzu.test/api/v1/playlists/%E6%99%9A%20%E9%A3%8E%2F%E7%B2%BE%E9%80%89?offset=0&limit=50',
+    );
+    expect(fetchFn.mock.calls[2][0]).toBe(
+      'https://yuzu.test/api/v1/playlists/%E6%99%9A%20%E9%A3%8E%2F%E7%B2%BE%E9%80%89?offset=50&limit=25',
+    );
+  });
 });

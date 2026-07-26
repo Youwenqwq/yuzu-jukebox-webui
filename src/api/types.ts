@@ -40,6 +40,32 @@ export interface ProviderInfo {
   credential_status?: string;
 }
 
+export interface PlaylistInfo {
+  id: string;
+  name: string;
+  description: string;
+  created_by: string;
+  created_at: number;
+  updated_at: number;
+  track_count: number;
+}
+
+export interface PlaylistItem {
+  ord: number;
+  track_ref: string;
+  title: string;
+  artist: string;
+  duration_ms: number;
+  added_at: number;
+}
+
+export interface PlaylistDetail {
+  playlist: PlaylistInfo;
+  items: PlaylistItem[];
+  offset: number;
+  limit: number;
+}
+
 export interface LyricsResult {
   type: 'lrc';
   lrc: string;
