@@ -1,11 +1,32 @@
-import { useTranslation } from 'react-i18next';
+import { useEffect, useState } from 'react';
+import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { session } from './app/session';
+import { initTheme } from './app/theme';
+import LoginView from './ui/LoginView';
+import LobbyView from './ui/LobbyView';
+import RoomView from './ui/RoomView';
 
-/** 占位外壳：内核（protocol/player/api）就绪后替换为真实视图。 */
+initTheme();
+
+type Phase = 'boot' | 'login' | 'ready';
+
 export default function App() {
-  const { t } = useTranslation();
+  const [phase, setPhase] = useState<Phase>('boot');
+
+  useEffect(() => {
+    void session.boot().then((ok) => setPhase(ok ? 'ready' : 'login'));
+  }, []);
+
+  if (phase === 'boot') return null;
+  if (phase === 'login') return <LoginView onDone={() => setPhase('ready')} />;
+
   return (
-    <div className="min-h-screen grid place-items-center">
-      <h1 className="font-display text-2xl">{t('app.title')}</h1>
-    </div>
+    <HashRouter>
+      <Routes>
+        <Route path="/" element={<LobbyView />} />
+        <Route path="/room/:roomId" element={<RoomView />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </HashRouter>
   );
 }
