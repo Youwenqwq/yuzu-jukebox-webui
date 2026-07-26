@@ -19,7 +19,19 @@ export default function LobbyView() {
     setFailed(false);
     api.listRooms().then(setRooms).catch(() => setFailed(true));
   };
-  useEffect(load, []);
+
+  // 大厅实况来自一次性 REST 快照：5s 轮询保活（曲终/换曲/人数变化），
+  // 窗口重新聚焦时立即刷新一次
+  useEffect(() => {
+    load();
+    const id = setInterval(load, 5000);
+    const onFocus = () => load();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, []);
 
   return (
     <div className="max-w-5xl mx-auto px-7 pb-16">
@@ -36,7 +48,9 @@ export default function LobbyView() {
       <div className="font-mono text-[11px] tracking-[0.14em] uppercase text-faint mb-2.5">
         {t('lobby.eyebrow')}
       </div>
-      <h1 className="font-display text-4xl font-semibold mb-9">{t('lobby.title')}</h1>
+      <h1 className="font-display text-4xl font-semibold mb-9">
+        {t('lobby.greeting', { period: t(greetingKey()), name: identity?.name ?? '' })}
+      </h1>
 
       {rooms === null && !failed && <p className="text-muted mb-6">{t('common.loading')}</p>}
 
@@ -58,6 +72,16 @@ export default function LobbyView() {
       </div>
     </div>
   );
+}
+
+/** 按小时取问候语 key */
+function greetingKey(): string {
+  const h = new Date().getHours();
+  if (h < 5) return 'lobby.periodNight';
+  if (h < 12) return 'lobby.periodMorning';
+  if (h < 14) return 'lobby.periodNoon';
+  if (h < 18) return 'lobby.periodAfternoon';
+  return 'lobby.periodEvening';
 }
 
 function IdentityChip() {

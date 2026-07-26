@@ -205,7 +205,12 @@ export const zhCN = {
   },
   lobby: {
     eyebrow: 'Lobby · 大厅',
-    title: '今晚去哪一间？',
+    greeting: '{{period}}，{{name}}',
+    periodNight: '夜深了',
+    periodMorning: '早上好',
+    periodNoon: '中午好',
+    periodAfternoon: '下午好',
+    periodEvening: '晚上好',
     playing: '播放中',
     paused: '已暂停',
     idle: '空闲',
