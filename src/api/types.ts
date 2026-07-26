@@ -132,6 +132,16 @@ export interface UploadMediaMeta {
   duration_ms?: number;
 }
 
+export interface LocalMediaInfo {
+  track_ref: string;
+  title: string;
+  artist: string;
+  duration_ms: number;
+  size_bytes: number;
+  uploaded_by: string;
+  created_at: number;
+}
+
 export interface CacheEntry {
   track_ref: string;
   file_path: string;

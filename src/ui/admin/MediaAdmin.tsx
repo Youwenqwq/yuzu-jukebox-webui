@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toDataURL } from 'qrcode';
-import type { CacheOverview, ProviderInfo } from '../../api/types';
+import type { CacheOverview, LocalMediaInfo, ProviderInfo } from '../../api/types';
 import { api } from '../../app/session';
-import { formatBytes, formatDateTime } from '../format';
-import { Dialog } from '../primitives';
+import { formatBytes, formatDateTime, formatMs } from '../format';
+import { ConfirmDialog, Dialog } from '../primitives';
 import { useToast } from '../toast';
 
 const inputClass =
@@ -37,6 +37,10 @@ export default function MediaAdmin() {
   const [providers, setProviders] = useState<ProviderInfo[] | null>(null);
   const [cache, setCache] = useState<CacheOverview | null>(null);
   const [cacheBusy, setCacheBusy] = useState(false);
+  const [media, setMedia] = useState<LocalMediaInfo[] | null>(null);
+  const [mediaBusy, setMediaBusy] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<LocalMediaInfo | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadArtist, setUploadArtist] = useState('');
@@ -74,14 +78,42 @@ export default function MediaAdmin() {
     }
   }, [showError]);
 
+  const loadMedia = useCallback(async () => {
+    setMediaBusy(true);
+    try {
+      setMedia(await api.listMedia());
+    } catch (error: unknown) {
+      setMedia([]);
+      showError(error);
+    } finally {
+      setMediaBusy(false);
+    }
+  }, [showError]);
+
   useEffect(() => {
     void loadProviders();
     void loadCache();
+    void loadMedia();
     return () => {
       qrGeneration.current += 1;
       clearInterval(qrInterval.current);
     };
-  }, [loadCache, loadProviders]);
+  }, [loadCache, loadProviders, loadMedia]);
+
+  const confirmDeleteMedia = async () => {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
+    try {
+      await api.deleteMedia(deleteTarget.track_ref);
+      show(t('admin.media.deletedToast', { title: deleteTarget.title }));
+      setDeleteTarget(null);
+      await loadMedia();
+    } catch (error: unknown) {
+      showError(error);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const upload = async () => {
     if (!uploadFile || uploadBusy) return;
@@ -97,6 +129,7 @@ export default function MediaAdmin() {
       setUploadArtist('');
       if (uploadInput.current) uploadInput.current.value = '';
       await loadCache();
+      await loadMedia();
     } catch (error: unknown) {
       showError(error);
     } finally {
@@ -249,6 +282,60 @@ export default function MediaAdmin() {
             {uploadBusy ? t('admin.media.uploading') : t('admin.media.upload')}
           </button>
         </form>
+      </section>
+
+      <section>
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h2 className="font-display text-xl font-semibold">{t('admin.media.libraryHeading')}</h2>
+            <p className="mt-1 text-sm text-muted">{t('admin.media.libraryIntro')}</p>
+          </div>
+          <button type="button" onClick={() => void loadMedia()} disabled={mediaBusy} className={secondaryButtonClass}>
+            {mediaBusy ? t('admin.common.working') : t('admin.common.refresh')}
+          </button>
+        </div>
+        {media === null ? (
+          <p className="py-6 text-center text-sm text-faint">{t('common.loading')}</p>
+        ) : media.length === 0 ? (
+          <p className="py-6 text-center text-sm text-faint">{t('admin.media.libraryEmpty')}</p>
+        ) : (
+          <div className="overflow-x-auto rounded-md border border-hairline">
+            <table className="w-full text-left text-[13px]">
+              <thead>
+                <tr className="border-b border-hairline text-xs text-faint">
+                  <th className="px-3 py-2 font-medium">{t('admin.media.colTitle')}</th>
+                  <th className="px-3 py-2 font-medium">{t('admin.media.colArtist')}</th>
+                  <th className="px-3 py-2 font-medium">{t('admin.media.durationLabel')}</th>
+                  <th className="px-3 py-2 font-medium">{t('admin.media.sizeLabel')}</th>
+                  <th className="px-3 py-2 font-medium">{t('admin.media.uploadedByLabel')}</th>
+                  <th className="px-3 py-2 font-medium">{t('admin.media.createdAtLabel')}</th>
+                  <th className="px-3 py-2 font-medium" />
+                </tr>
+              </thead>
+              <tbody>
+                {media.map((item) => (
+                  <tr key={item.track_ref} className="border-b border-hairline last:border-b-0 hover:bg-panel-2">
+                    <td className="max-w-[220px] truncate px-3 py-2.5">{item.title}</td>
+                    <td className="max-w-[160px] truncate px-3 py-2.5 text-muted">{item.artist || t('admin.common.none')}</td>
+                    <td className="px-3 py-2.5 font-mono tabular-nums text-muted">{formatMs(item.duration_ms)}</td>
+                    <td className="px-3 py-2.5 font-mono tabular-nums text-muted">{formatBytes(item.size_bytes)}</td>
+                    <td className="max-w-[120px] truncate px-3 py-2.5 font-mono text-xs text-muted">{item.uploaded_by}</td>
+                    <td className="px-3 py-2.5 font-mono tabular-nums text-muted">{formatDateTime(item.created_at)}</td>
+                    <td className="px-3 py-2.5 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget(item)}
+                        className="text-xs text-muted hover:text-[#D05A4E]"
+                      >
+                        {t('admin.media.deleteAction')}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <section>
@@ -419,6 +506,19 @@ export default function MediaAdmin() {
           </div>
         </div>
       </Dialog>
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title={t('admin.media.deleteTitle')}
+        description={deleteTarget ? t('admin.media.deleteConfirm', { title: deleteTarget.title }) : undefined}
+        confirmText={deleting ? t('admin.common.working') : t('admin.media.deleteAction')}
+        cancelText={t('common.cancel')}
+        danger
+        onConfirm={() => void confirmDeleteMedia()}
+      />
     </div>
   );
 }

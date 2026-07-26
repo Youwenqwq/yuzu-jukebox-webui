@@ -10,6 +10,7 @@ import type {
   DeletePlaylistItemResult,
   HistoryEntry,
   ImportPlaylistInput,
+  LocalMediaInfo,
   LyricsResult,
   MovePlaylistItemResult,
   OidcConfig,
@@ -245,6 +246,17 @@ export class ApiClient {
 
   async listCache(): Promise<CacheOverview> {
     return this.#json<CacheOverview>('/api/v1/media/cache');
+  }
+
+  async listMedia(): Promise<LocalMediaInfo[]> {
+    const result = await this.#json<{ media: LocalMediaInfo[] }>('/api/v1/media');
+    return result.media;
+  }
+
+  async deleteMedia(trackRef: string): Promise<void> {
+    await this.#json<{ deleted: string }>(`/api/v1/media/${encodeURIComponent(trackRef)}`, {
+      method: 'DELETE',
+    });
   }
 
   async evictCache(trackRef: string): Promise<void> {
