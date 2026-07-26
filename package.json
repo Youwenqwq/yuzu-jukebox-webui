@@ -1,0 +1,31 @@
+{
+  "name": "yuzu-jukebox-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "i18next": "^25.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-i18next": "^16.0.0",
+    "react-router-dom": "^7.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.0",
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "tailwindcss": "^4.1.0",
+    "typescript": "~5.8.0",
+    "vite": "^7.0.0",
+    "vitest": "^3.0.0"
+  }
+}

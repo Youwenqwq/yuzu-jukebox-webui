@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Yuzu Jukebox</title>
+  <script>
+    // 首帧前落 scheme，避免刷白/刷黑；localStorage 有用户锁定值则优先
+    (function () {
+      try {
+        var saved = localStorage.getItem('yuzu-scheme');
+        var sysDark = matchMedia('(prefers-color-scheme: dark)').matches;
+        document.documentElement.dataset.scheme = saved || (sysDark ? 'dark' : 'light');
+      } catch (_) {
+        document.documentElement.dataset.scheme = 'dark';
+      }
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>

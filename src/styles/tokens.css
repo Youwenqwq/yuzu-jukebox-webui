@@ -1,0 +1,110 @@
+@import "tailwindcss";
+
+/* ============================================================
+   YUZU JUKEBOX · 设计 Token 层（与 design/mockup.html 同源）
+   三条正交主题轴：
+   1. scheme（深/浅）：基底色板，data-scheme 切换，默认跟随系统
+   2. accent（主题色）：用户自定义，运行时只改 --accent，派生靠 color-mix
+   3. glow（封面辉光）：封面取色，与前两轴隔离
+   ============================================================ */
+:root {
+  --accent: #E3B93C;
+  --accent-soft: color-mix(in srgb, var(--accent) 13%, transparent);
+  --accent-line: color-mix(in srgb, var(--accent) 40%, transparent);
+  --on-accent: #1A1607;
+  --ring: color-mix(in srgb, var(--accent) 55%, transparent);
+
+  --font-display: "Fraunces", "Songti SC", "Noto Serif SC", serif;
+  --font-body: -apple-system, "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  --radius: 6px;
+  --speed: 240ms;
+}
+
+:root[data-scheme="dark"] {
+  color-scheme: dark;
+  --hall: #131210;
+  --panel: #1C1A17;
+  --panel-2: #24211B;
+  --hairline: #2A2723;
+  --paper: #EDE8DF;
+  --muted: #8B857A;
+  --faint: #5C574E;
+  --rail: rgba(255, 255, 255, 0.09);
+  --hover: rgba(255, 255, 255, 0.055);
+  --cover-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+  --toast-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  --glow-opacity: 0.5;
+  --glow-blur: 30px;
+}
+
+:root[data-scheme="light"] {
+  color-scheme: light;
+  --hall: #F4F2EC;
+  --panel: #FBFAF6;
+  --panel-2: #FFFFFF;
+  --hairline: #E3DFD4;
+  --paper: #211E19;
+  --muted: #7A756A;
+  --faint: #A39D90;
+  --rail: rgba(30, 25, 15, 0.12);
+  --hover: rgba(30, 25, 15, 0.05);
+  --cover-shadow: 0 14px 36px rgba(60, 50, 30, 0.22);
+  --toast-shadow: 0 12px 36px rgba(60, 50, 30, 0.18);
+  --glow-opacity: 0.32;
+  --glow-blur: 44px;
+}
+
+/* Tailwind v4 主题映射：bg-hall / text-paper / font-display 等工具类 */
+@theme inline {
+  --color-hall: var(--hall);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-hairline: var(--hairline);
+  --color-paper: var(--paper);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-line: var(--accent-line);
+  --color-on-accent: var(--on-accent);
+  --color-ring: var(--ring);
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+  --font-mono: var(--font-mono);
+}
+
+html {
+  background: var(--hall);
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--paper);
+  background: var(--hall);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
