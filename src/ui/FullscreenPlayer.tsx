@@ -1,4 +1,5 @@
 import { useEffect, useReducer, useState, type JSX } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { roomStore, client } from '../app/session';
 import type { Playback } from '../protocol/types';
@@ -55,7 +56,8 @@ export function FullscreenPlayer(props: {
     ),
   );
 
-  return (
+  // portal 到 body：任何祖先的 transform/filter/动画都不能影响 fixed 覆盖定位
+  return createPortal(
     <div className="fixed inset-0 z-50 bg-hall overflow-y-auto">
       {/* 整幅辉光背景：比舞台更强的存在感，主色取自封面 */}
       <div
@@ -157,6 +159,7 @@ export function FullscreenPlayer(props: {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
