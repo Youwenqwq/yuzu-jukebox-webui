@@ -14,6 +14,8 @@ import { extractGlowColors } from './glow';
 import { LyricsPanel } from './LyricsPanel';
 import { BatchAddPanel } from './BatchAddPanel';
 import { useToast } from './toast';
+import { RoomAdminPanel } from './RoomAdminPanel';
+import { FullscreenPlayer } from './FullscreenPlayer';
 
 /** 由五元组 + 校时时钟推算"此刻应该放到哪"（spec §2.2） */
 function shouldBe(pb: Playback): number {
@@ -100,6 +102,32 @@ export default function RoomView() {
   isAdminRef.current = isAdmin;
   const current = state.playback.current;
 
+  // 歌词数据：换曲目重新拉取；舞台小预览与全屏播放页共享同一份
+  const [lyrics, setLyrics] = useState<LyricLine[] | null>(null);
+  const [lyricsLoading, setLyricsLoading] = useState(false);
+  const [playerOpen, setPlayerOpen] = useState(false);
+  const trackRef = state.playback.current?.track_ref;
+  useEffect(() => {
+    setLyrics(null);
+    if (!trackRef) return;
+    let dead = false;
+    setLyricsLoading(true);
+    api
+      .lyrics(trackRef)
+      .then((res) => {
+        if (!dead) setLyrics(res ? parseLrc(res.lrc, res.tlrc) : []);
+      })
+      .catch(() => {
+        if (!dead) setLyrics([]);
+      })
+      .finally(() => {
+        if (!dead) setLyricsLoading(false);
+      });
+    return () => {
+      dead = true;
+    };
+  }, [trackRef]);
+
   // requested_by 是身份 ID（spec §4.1）；优先用条目自带的 requester_name 快照，
   // 缺省（旧数据）再查听众表，最后回退显示 ID。
   const nameById = new Map(state.listeners.map((l) => [l.id, l.name]));
@@ -147,8 +175,16 @@ export default function RoomView() {
       ) : (
         <div className="grid gap-7 lg:grid-cols-[minmax(0,1fr)_340px] items-start">
           <div>
-            <Stage playback={state.playback} isAdmin={isAdmin} nameOf={nameOf} />
+            <Stage
+              playback={state.playback}
+              isAdmin={isAdmin}
+              nameOf={nameOf}
+              lyrics={lyrics}
+              lyricsLoading={lyricsLoading}
+              onExpand={() => setPlayerOpen(true)}
+            />
             <ListenersBar />
+            {isAdmin && <RoomAdminPanel roomId={roomId} radio={state.radio} />}
           </div>
           <QueuePanel
             queue={state.queue}
@@ -162,7 +198,16 @@ export default function RoomView() {
         </div>
       )}
 
-      {current === null && <span className="hidden" />}
+      {playerOpen && current && (
+        <FullscreenPlayer
+          playback={state.playback}
+          isAdmin={isAdmin}
+          nameOf={nameOf}
+          lines={lyrics}
+          lyricsLoading={lyricsLoading}
+          onClose={() => setPlayerOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -171,7 +216,21 @@ export default function RoomView() {
 
 type NameOf = (id: string, snapshot?: string) => string;
 
-function Stage({ playback, isAdmin, nameOf }: { playback: Playback; isAdmin: boolean; nameOf: NameOf }) {
+function Stage({
+  playback,
+  isAdmin,
+  nameOf,
+  lyrics,
+  lyricsLoading,
+  onExpand,
+}: {
+  playback: Playback;
+  isAdmin: boolean;
+  nameOf: NameOf;
+  lyrics: LyricLine[] | null;
+  lyricsLoading: boolean;
+  onExpand: () => void;
+}) {
   const { t } = useTranslation();
   const [, forceTick] = useReducer((x: number) => x + 1, 0);
   useEffect(() => {
@@ -185,31 +244,8 @@ function Stage({ playback, isAdmin, nameOf }: { playback: Playback; isAdmin: boo
   // 封面辉光：取色失败/无封面保持默认色，切歌时保留旧色直至新色就绪（600ms 渐变过渡）
   const [glow, setGlow] = useState<[string, string] | null>(null);
 
-  // 歌词：换曲目重新拉取；无歌词能力的来源 → 空数组（降级提示）
+  // 小预览开关；歌词数据由 RoomView 持有（与全屏播放页共享）
   const [lyricsOpen, setLyricsOpen] = useState(false);
-  const [lyrics, setLyrics] = useState<LyricLine[] | null>(null);
-  const [lyricsLoading, setLyricsLoading] = useState(false);
-  const trackRef = current?.track_ref;
-  useEffect(() => {
-    setLyrics(null);
-    if (!trackRef) return;
-    let dead = false;
-    setLyricsLoading(true);
-    api
-      .lyrics(trackRef)
-      .then((res) => {
-        if (!dead) setLyrics(res ? parseLrc(res.lrc, res.tlrc) : []);
-      })
-      .catch(() => {
-        if (!dead) setLyrics([]);
-      })
-      .finally(() => {
-        if (!dead) setLyricsLoading(false);
-      });
-    return () => {
-      dead = true;
-    };
-  }, [trackRef]);
 
   const pos = current ? Math.max(0, Math.min(shouldBe(playback), current.duration_ms)) : 0;
   const pct = current && current.duration_ms > 0 ? (pos / current.duration_ms) * 100 : 0;
@@ -303,6 +339,15 @@ function Stage({ playback, isAdmin, nameOf }: { playback: Playback; isAdmin: boo
           className={`w-8.5 h-8.5 grid place-items-center rounded-md hover:bg-[var(--hover)] ${lyricsOpen ? 'text-accent' : 'text-muted hover:text-paper'}`}
         >
           ♪
+        </button>
+        <button
+          title={t('room.expand')}
+          onClick={onExpand}
+          className="w-8.5 h-8.5 grid place-items-center rounded-md text-muted hover:text-paper hover:bg-[var(--hover)]"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+          </svg>
         </button>
         <input
           type="range"

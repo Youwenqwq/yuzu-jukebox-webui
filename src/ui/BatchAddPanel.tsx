@@ -241,7 +241,6 @@ export function BatchAddPanel({ onToast, onError }: BatchAddPanelProps): JSX.Ele
                       selected ? 'border-l-accent bg-panel-2' : 'border-l-transparent hover:bg-panel-2'
                     }`}
                   >
-                    <span className={`w-3.5 text-[11px] ${selected ? 'text-accent' : 'text-transparent'}`}>✓</span>
                     <div className="min-w-0 flex-1">
                       <div className="text-[13px] truncate">{track.title}</div>
                       <div className="text-[11px] text-muted truncate">{track.artist}</div>
@@ -324,8 +323,7 @@ export function BatchAddPanel({ onToast, onError }: BatchAddPanelProps): JSX.Ele
                               selected ? 'border-l-accent bg-panel-2' : 'border-l-transparent hover:bg-panel-2'
                             }`}
                           >
-                            <span className={`w-3.5 text-[11px] ${selected ? 'text-accent' : 'text-transparent'}`}>✓</span>
-                            <span className="w-6 text-right font-mono text-[10px] text-faint tabular-nums">
+                                    <span className="w-6 text-right font-mono text-[10px] text-faint tabular-nums">
                               {item.ord}
                             </span>
                             <div className="min-w-0 flex-1">

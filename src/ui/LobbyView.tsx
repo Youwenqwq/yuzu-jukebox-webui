@@ -5,9 +5,13 @@ import type { RoomInfo } from '../api/types';
 import { api, client } from '../app/session';
 import { useIdentity } from './hooks';
 import ThemeControls from './ThemeControls';
+import { ConfirmDialog, Dialog } from './primitives';
+import { useToast } from './toast';
 
 export default function LobbyView() {
   const { t } = useTranslation();
+  const identity = useIdentity();
+  const isRoomAdmin = identity?.roles.includes('room_admin') ?? false;
   const [rooms, setRooms] = useState<RoomInfo[] | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -46,9 +50,10 @@ export default function LobbyView() {
 
       <div className="grid gap-3.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
         {(rooms ?? []).map((room) => (
-          <RoomCard key={room.id} room={room} />
+          <RoomCard key={room.id} room={room} isRoomAdmin={isRoomAdmin} onDeleted={load} />
         ))}
-        {rooms?.length === 0 && <p className="text-muted">{t('lobby.noRooms')}</p>}
+        {rooms !== null && isRoomAdmin && <CreateRoomCard onCreated={load} />}
+        {rooms?.length === 0 && !isRoomAdmin && <p className="text-muted">{t('lobby.noRooms')}</p>}
       </div>
     </div>
   );
@@ -67,9 +72,117 @@ function AdminEntry() {
   );
 }
 
-function RoomCard({ room }: { room: RoomInfo }) {
+function CreateRoomCard({ onCreated }: { onCreated: () => void }) {
+  const { t } = useTranslation();
+  const { show, showError } = useToast();
+  const [open, setOpen] = useState(false);
+  const [roomId, setRoomId] = useState('');
+  const [name, setName] = useState('');
+  const [guestPassword, setGuestPassword] = useState('');
+  const [creating, setCreating] = useState(false);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="min-h-40 rounded-md border border-dashed border-hairline bg-transparent p-5 text-left text-muted transition-colors hover:border-accent hover:bg-panel hover:text-accent"
+      >
+        <span className="block font-display text-xl font-semibold">{t('lobby.createRoom')}</span>
+        <span className="mt-2 block text-xs text-faint">{t('lobby.createRoomHint')}</span>
+      </button>
+
+      <Dialog open={open} onOpenChange={setOpen} title={t('lobby.createRoomTitle')}>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            const trimmedName = name.trim();
+            if (!trimmedName || creating) return;
+            setCreating(true);
+            void api
+              .createRoom({
+                id: roomId.trim() || undefined,
+                name: trimmedName,
+                guest_password: guestPassword || undefined,
+              })
+              .then(() => {
+                show(t('lobby.roomCreated', { name: trimmedName }));
+                setOpen(false);
+                setRoomId('');
+                setName('');
+                setGuestPassword('');
+                onCreated();
+              })
+              .catch(showError)
+              .finally(() => setCreating(false));
+          }}
+        >
+          <label className="block text-xs text-muted">
+            {t('lobby.roomId')}
+            <input
+              value={roomId}
+              onChange={(event) => setRoomId(event.target.value)}
+              placeholder={t('lobby.roomIdPlaceholder')}
+              className="mt-1.5 w-full rounded-md border border-hairline bg-panel px-3 py-2 text-[13px] placeholder:text-faint"
+            />
+          </label>
+          <label className="mt-4 block text-xs text-muted">
+            {t('lobby.roomName')}
+            <input
+              required
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder={t('lobby.roomNamePlaceholder')}
+              className="mt-1.5 w-full rounded-md border border-hairline bg-panel px-3 py-2 text-[13px] placeholder:text-faint"
+            />
+          </label>
+          <label className="mt-4 block text-xs text-muted">
+            {t('lobby.guestPassword')}
+            <input
+              type="password"
+              value={guestPassword}
+              onChange={(event) => setGuestPassword(event.target.value)}
+              placeholder={t('lobby.guestPasswordPlaceholder')}
+              className="mt-1.5 w-full rounded-md border border-hairline bg-panel px-3 py-2 text-[13px] placeholder:text-faint"
+            />
+          </label>
+          <div className="mt-6 flex justify-end gap-3">
+            <button
+              type="button"
+              disabled={creating}
+              onClick={() => setOpen(false)}
+              className="rounded-full border border-hairline px-4 py-1.5 text-sm text-muted hover:border-faint hover:text-paper disabled:opacity-40"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              type="submit"
+              disabled={creating || !name.trim()}
+              className="rounded-full bg-accent px-4 py-1.5 text-sm font-medium text-on-accent hover:brightness-105 disabled:opacity-40"
+            >
+              {creating ? t('lobby.creatingRoom') : t('lobby.createRoomConfirm')}
+            </button>
+          </div>
+        </form>
+      </Dialog>
+    </>
+  );
+}
+
+function RoomCard({
+  room,
+  isRoomAdmin,
+  onDeleted,
+}: {
+  room: RoomInfo;
+  isRoomAdmin: boolean;
+  onDeleted: () => void;
+}) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { show, showError } = useToast();
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   // 进度条每秒重算（校时时钟由 WS 连接在启动时建立）
   const [, forceTick] = useReducer((x: number) => x + 1, 0);
   useEffect(() => {
@@ -89,53 +202,95 @@ function RoomCard({ room }: { room: RoomInfo }) {
     : 0;
 
   return (
-    <button
-      onClick={() => navigate(`/room/${encodeURIComponent(room.id)}`)}
-      className="text-left bg-panel border border-hairline rounded-md p-4.5 hover:border-faint hover:bg-panel-2 transition-colors cursor-pointer"
-    >
-      <h2 className="font-display text-xl font-semibold">{room.name}</h2>
-      <div className="flex gap-3 text-[12.5px] text-muted mt-0.5">
-        {np ? (
-          np.playing ? (
-            <span className="text-accent inline-flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-              {t('lobby.playing')}
-            </span>
-          ) : (
-            <span className="text-faint">{t('lobby.paused')}</span>
-          )
-        ) : (
-          <span className="text-faint">{t('lobby.idle')}</span>
+    <>
+      <div className="group relative">
+        <button
+          type="button"
+          onClick={() => navigate(`/room/${encodeURIComponent(room.id)}`)}
+          className="h-full w-full cursor-pointer rounded-md border border-hairline bg-panel p-4.5 text-left transition-colors hover:border-faint hover:bg-panel-2"
+        >
+          <h2 className="pr-8 font-display text-xl font-semibold">{room.name}</h2>
+          <div className="mt-0.5 flex gap-3 text-[12.5px] text-muted">
+            {np ? (
+              np.playing ? (
+                <span className="inline-flex items-center gap-1.5 text-accent">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+                  {t('lobby.playing')}
+                </span>
+              ) : (
+                <span className="text-faint">{t('lobby.paused')}</span>
+              )
+            ) : (
+              <span className="text-faint">{t('lobby.idle')}</span>
+            )}
+            <span>{t('lobby.listenerCount', { count: room.listener_count })}</span>
+          </div>
+
+          <div className="mt-3.5 border-t border-hairline pt-3">
+            {np ? (
+              <div className="flex items-center gap-2.5">
+                {np.cover_url ? (
+                  <img src={np.cover_url} alt="" className="h-8.5 w-8.5 flex-none rounded object-cover" />
+                ) : (
+                  <div className="h-8.5 w-8.5 flex-none rounded bg-panel-2" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[13.5px]">{np.title}</div>
+                  <div className="truncate text-xs text-muted">{np.artist}</div>
+                  <div className="mt-1.5 h-0.5 overflow-hidden rounded bg-[var(--rail)]">
+                    <div
+                      className="h-full bg-accent"
+                      style={{ width: `${np.duration_ms > 0 ? (pos / np.duration_ms) * 100 : 0}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div className="text-[13px] text-muted">{t('lobby.emptyQueue')}</div>
+                <div className="text-xs text-accent">{t('lobby.firstSong')}</div>
+              </div>
+            )}
+          </div>
+        </button>
+
+        {isRoomAdmin && (
+          <button
+            type="button"
+            aria-label={t('lobby.deleteRoom', { name: room.name })}
+            onClick={(event) => {
+              event.stopPropagation();
+              setDeleteOpen(true);
+            }}
+            className="absolute right-3 top-3 grid h-7 w-7 place-items-center rounded-full border border-transparent text-lg leading-none text-faint opacity-0 transition-all hover:border-hairline hover:bg-panel-2 hover:text-paper focus:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100"
+          >
+            ×
+          </button>
         )}
-        <span>{t('lobby.listenerCount', { count: room.listener_count })}</span>
       </div>
 
-      <div className="mt-3.5 pt-3 border-t border-hairline">
-        {np ? (
-          <div className="flex items-center gap-2.5">
-            {np.cover_url ? (
-              <img src={np.cover_url} alt="" className="w-8.5 h-8.5 rounded object-cover flex-none" />
-            ) : (
-              <div className="w-8.5 h-8.5 rounded bg-panel-2 flex-none" />
-            )}
-            <div className="min-w-0 flex-1">
-              <div className="text-[13.5px] truncate">{np.title}</div>
-              <div className="text-xs text-muted truncate">{np.artist}</div>
-              <div className="h-0.5 bg-[var(--rail)] rounded mt-1.5 overflow-hidden">
-                <div
-                  className="h-full bg-accent"
-                  style={{ width: `${np.duration_ms > 0 ? (pos / np.duration_ms) * 100 : 0}%` }}
-                />
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div>
-            <div className="text-[13px] text-muted">{t('lobby.emptyQueue')}</div>
-            <div className="text-xs text-accent">{t('lobby.firstSong')}</div>
-          </div>
-        )}
-      </div>
-    </button>
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title={t('lobby.deleteRoomTitle')}
+        description={t('lobby.deleteRoomDescription', { name: room.name })}
+        confirmText={deleting ? t('lobby.deletingRoom') : t('lobby.deleteRoomConfirm')}
+        cancelText={t('common.cancel')}
+        danger
+        onConfirm={() => {
+          if (deleting) return;
+          setDeleting(true);
+          void api
+            .deleteRoom(room.id)
+            .then(() => {
+              setDeleteOpen(false);
+              show(t('lobby.roomDeleted', { name: room.name }));
+              onDeleted();
+            })
+            .catch(showError)
+            .finally(() => setDeleting(false));
+        }}
+      />
+    </>
   );
 }

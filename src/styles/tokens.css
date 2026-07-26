@@ -100,6 +100,14 @@ body {
   border-radius: 2px;
 }
 
+/* ---------- 工具类 ---------- */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* ---------- 滚动条风格化（WebKit + Firefox） ---------- */
 * {
   scrollbar-width: thin;
