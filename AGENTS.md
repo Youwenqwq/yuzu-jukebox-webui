@@ -29,6 +29,8 @@ src/
 - **组合根单例**：`<audio>`、AudioRenderer、YuzuClient、SessionStore 全在 `app/`
   持有。曾发生过的 bug：RoomView 每次挂载新建 audio → 离房后旧实例继续发声、
   重进房双重播放。**任何视图不得自建内核实例**。
+- **App 根部组成不可丢**：ToastProvider 包裹 login/router 全树（曾重写 App 时误删导致
+  全线 useToast 崩溃）；OIDC 回调识别、boot 阶段、identity 置空回登录页也在根部。
 - **内核不 import React / i18n**；错误一律 `YuzuError(code, message)`，UI 经
   `ui/errors.ts` 的 `errorKey()` 映射到 i18n 文案。
 - **i18n 零硬编码**：所有可见文案必须经 `t()`，新 key 追加到 `i18n/zh-CN.ts`。
