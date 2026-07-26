@@ -21,7 +21,7 @@ export function ConfirmDialog(props: {
     <DialogPrimitive.Root open={props.open} onOpenChange={props.onOpenChange}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-black/60" />
-        <DialogPrimitive.Content className="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(92vw,380px)] bg-panel-2 border border-hairline rounded-lg p-6">
+        <DialogPrimitive.Content className="pop-enter fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(92vw,380px)] bg-panel-2 border border-hairline rounded-lg p-6">
           <DialogPrimitive.Title className="font-display text-lg font-semibold">
             {props.title}
           </DialogPrimitive.Title>
@@ -64,7 +64,7 @@ export function Dialog(props: {
     <DialogPrimitive.Root open={props.open} onOpenChange={props.onOpenChange}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-black/60" />
-        <DialogPrimitive.Content className="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(92vw,440px)] max-h-[85vh] overflow-y-auto bg-panel-2 border border-hairline rounded-lg p-6">
+        <DialogPrimitive.Content className="pop-enter fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(92vw,440px)] max-h-[85vh] overflow-y-auto bg-panel-2 border border-hairline rounded-lg p-6">
           <DialogPrimitive.Title className="font-display text-lg font-semibold mb-4">
             {props.title}
           </DialogPrimitive.Title>
@@ -123,7 +123,7 @@ export function Select(props: {
         <SelectPrimitive.Icon className="text-faint text-[10px]">▼</SelectPrimitive.Icon>
       </SelectPrimitive.Trigger>
       <SelectPrimitive.Portal>
-        <SelectPrimitive.Content className="z-50 bg-panel-2 border border-hairline rounded-md overflow-hidden shadow-xl">
+        <SelectPrimitive.Content className="pop-enter z-50 bg-panel-2 border border-hairline rounded-md overflow-hidden shadow-xl">
           <SelectPrimitive.Viewport>
             {props.options.map((opt) => (
               <SelectPrimitive.Item

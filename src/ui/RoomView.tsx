@@ -136,7 +136,7 @@ export default function RoomView() {
   const nameOf = (id: string, snapshot?: string) => snapshot || nameById.get(id) || id;
 
   return (
-    <div className="max-w-6xl mx-auto px-7 pb-16">
+    <div className="view-enter max-w-6xl mx-auto px-7 pb-16">
       {(status === 'reconnecting' || status === 'offline') && (
         <div className="bg-accent-soft text-accent text-sm text-center py-1.5 mb-2 rounded">
           {t(status === 'offline' ? 'conn.offline' : 'conn.reconnecting')}
@@ -362,7 +362,7 @@ function Stage({
             void roomStore.seek(Math.round(ratio * current.duration_ms)).catch(() => {});
           }}
         >
-          <div className="h-full bg-accent rounded" style={{ width: `${pct}%` }} />
+          <div className="progress-glide h-full bg-accent rounded" style={{ width: `${pct}%` }} />
         </div>
         <div className="flex justify-between font-mono text-[11.5px] text-muted mt-1.5 tabular-nums">
           <span>{formatMs(pos)}</span>
@@ -535,7 +535,7 @@ function Ticket({
       onDragOver={dnd?.onDragOver}
       onDrop={dnd?.onDrop}
       onDragEnd={dnd?.onDragEnd}
-      className={`group grid grid-cols-[34px_1fr_auto] gap-3 px-4.5 py-3 border-b border-hairline last:border-b-0 hover:bg-panel-2 ${mine ? 'shadow-[inset_2px_0_0_var(--accent)]' : ''} ${dnd ? 'cursor-grab active:cursor-grabbing' : ''} ${dragging ? 'opacity-40' : ''}`}
+      className={`ticket-enter group grid grid-cols-[34px_1fr_auto] gap-3 px-4.5 py-3 border-b border-hairline last:border-b-0 hover:bg-panel-2 ${mine ? 'shadow-[inset_2px_0_0_var(--accent)]' : ''} ${dnd ? 'cursor-grab active:cursor-grabbing' : ''} ${dragging ? 'opacity-40' : ''}`}
     >
       <span className="font-mono text-xs text-faint pt-1 tabular-nums">{String(index).padStart(2, '0')}</span>
       <div className="min-w-0">

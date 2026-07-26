@@ -100,6 +100,37 @@ body {
   border-radius: 2px;
 }
 
+/* ---------- 动效（prefers-reduced-motion 下全部被下方规则关闭） ---------- */
+@keyframes yuzu-fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes yuzu-pop-in {
+  from { opacity: 0; transform: scale(0.96) translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes yuzu-slide-in-left {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* 页面级视图进场 */
+.view-enter {
+  animation: yuzu-fade-up var(--speed) ease both;
+}
+/* 新条目（小票）进场 */
+.ticket-enter {
+  animation: yuzu-slide-in-left var(--speed) ease both;
+}
+/* 弹层（Dialog/Select 内容）进场 */
+.pop-enter {
+  animation: yuzu-pop-in calc(var(--speed) * 0.8) ease both;
+}
+/* 进度条秒间滑行（对齐 1s 校偏节拍） */
+.progress-glide {
+  transition: width 1s linear;
+}
+
 /* ---------- 复选框风格化 ---------- */
 .yuzu-checkbox {
   -webkit-appearance: none;

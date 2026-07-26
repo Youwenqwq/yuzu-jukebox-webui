@@ -30,7 +30,7 @@ export default function AdminView() {
     : (availableTabs[0]?.value ?? '');
 
   return (
-    <div className="mx-auto max-w-5xl px-7 pb-16">
+    <div className="view-enter mx-auto max-w-5xl px-7 pb-16">
       <header className="mb-8 flex items-center gap-4 border-b border-hairline py-5">
         <div className="font-display text-xl font-semibold">
           {t('admin.brandPrimary')} <em className="font-normal italic text-accent">{t('admin.brandAccent')}</em>

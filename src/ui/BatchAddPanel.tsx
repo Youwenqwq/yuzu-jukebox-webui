@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { PlaylistDetail, PlaylistInfo, SearchTrack } from '../api/types';
 import { api, roomStore } from '../app/session';
 import { formatMs } from './format';
+import { Select } from './primitives';
 
 type BatchTab = 'search' | 'playlist';
 
@@ -188,17 +189,11 @@ export function BatchAddPanel({ onToast, onError }: BatchAddPanelProps): JSX.Ele
         <div className="p-3">
           <div className="flex gap-2">
             {providers.length > 1 && (
-              <select
+              <Select
                 value={provider}
-                onChange={(event) => setProvider(event.target.value)}
-                className="bg-panel-2 border border-hairline rounded-md px-2 text-xs"
-              >
-                {providers.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
-              </select>
+                onValueChange={setProvider}
+                options={providers.map((item) => ({ value: item, label: item }))}
+              />
             )}
             <input
               value={query}

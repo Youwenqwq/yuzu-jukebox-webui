@@ -34,7 +34,7 @@ export default function LobbyView() {
   }, []);
 
   return (
-    <div className="max-w-5xl mx-auto px-7 pb-16">
+    <div className="view-enter max-w-5xl mx-auto px-7 pb-16">
       <header className="flex items-center gap-4 py-5 border-b border-hairline mb-9">
         <div className="font-display text-xl font-semibold">
           Yuzu <em className="italic font-normal text-accent">Jukebox</em>
@@ -278,7 +278,7 @@ function RoomCard({
                   <div className="truncate text-xs text-muted">{np.artist}</div>
                   <div className="mt-1.5 h-0.5 overflow-hidden rounded bg-[var(--rail)]">
                     <div
-                      className="h-full bg-accent"
+                      className="progress-glide h-full bg-accent"
                       style={{ width: `${np.duration_ms > 0 ? (pos / np.duration_ms) * 100 : 0}%` }}
                     />
                   </div>

@@ -116,7 +116,7 @@ export function FullscreenPlayer(props: {
             }}
           >
             <div
-              className="h-full bg-accent rounded"
+              className="progress-glide h-full bg-accent rounded"
               style={{ width: `${current.duration_ms > 0 ? (pos / current.duration_ms) * 100 : 0}%` }}
             />
           </div>
