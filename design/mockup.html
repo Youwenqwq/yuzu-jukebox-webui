@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-scheme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yuzu Jukebox — 视觉稿</title>
+<script>
+/* 避免刷白/刷黑：首帧前落 scheme */
+(function () {
+  const saved = localStorage.getItem('yuzu-scheme');
+  const sysDark = matchMedia('(prefers-color-scheme: dark)').matches;
+  document.documentElement.dataset.scheme = saved || (sysDark ? 'dark' : 'light');
+})();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   YUZU JUKEBOX · 设计 Token 层
+   三条正交的主题轴：
+   1. scheme（深/浅）：基底色板整体切换，默认跟随系统，可手动锁定
+   2. accent（主题色）：用户自定义，默认柚子黄；运行时只改 --accent，
+      其余由 color-mix 派生；--on-accent 按亮度计算保证对比
+   3. glow（封面辉光）：来自封面取色，与前两条轴无关——辉光是
+      "房间的情绪"，accent 是"UI 的铬件"，永不混用
+   ============================================================ */
+:root {
+  --accent: #E3B93C;               /* 柚子黄（默认主题色） */
+  --accent-soft: color-mix(in srgb, var(--accent) 13%, transparent);
+  --accent-line: color-mix(in srgb, var(--accent) 40%, transparent);
+  --on-accent: #1A1607;            /* JS 按 accent 亮度覆写 */
+  --ring:      color-mix(in srgb, var(--accent) 55%, transparent);
+
+  --font-display: "Fraunces", "Songti SC", "Noto Serif SC", serif;
+  --font-body: -apple-system, "PingFang SC", "Hiragino Sans GB",
+               "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  --radius: 6px;
+  --speed: 240ms;
+}
+
+/* 深色：夜间大厅（身份主方案） */
+:root[data-scheme="dark"] {
+  color-scheme: dark;
+  --hall:    #131210;
+  --panel:   #1C1A17;
+  --panel-2: #24211B;
+  --hairline:#2A2723;
+  --paper:   #EDE8DF;
+  --muted:   #8B857A;
+  --faint:   #5C574E;
+  --rail:    rgba(255,255,255,.09);   /* 进度未填充段 */
+  --hover:   rgba(255,255,255,.055);  /* 悬停罩层 */
+  --cover-shadow: 0 18px 50px rgba(0,0,0,.5);
+  --toast-shadow: 0 12px 40px rgba(0,0,0,.45);
+  --glow-opacity: .5;
+  --glow-blur: 30px;
+}
+
+/* 浅色：同一间房间开了灯——暖纸白而非冷灰 */
+:root[data-scheme="light"] {
+  color-scheme: light;
+  --hall:    #F4F2EC;
+  --panel:   #FBFAF6;
+  --panel-2: #FFFFFF;
+  --hairline:#E3DFD4;
+  --paper:   #211E19;
+  --muted:   #7A756A;
+  --faint:   #A39D90;
+  --rail:    rgba(30,25,15,.12);
+  --hover:   rgba(30,25,15,.05);
+  --cover-shadow: 0 14px 36px rgba(60,50,30,.22);
+  --toast-shadow: 0 12px 36px rgba(60,50,30,.18);
+  --glow-opacity: .32;
+  --glow-blur: 44px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { background: var(--hall); }
+
+body {
+  font-family: var(--font-body);
+  color: var(--paper);
+  background: var(--hall);
+  min-height: 100vh;
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  transition: background var(--speed), color var(--speed);
+}
+
+::selection { background: var(--accent); color: var(--on-accent); }
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* ---------- 骨架 ---------- */
+.shell { max-width: 1180px; margin: 0 auto; padding: 0 28px 64px; }
+
+.topbar {
+  display: flex; align-items: center; gap: 16px;
+  padding: 22px 0 18px;
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: 36px;
+}
+.wordmark {
+  font-family: var(--font-display);
+  font-weight: 600; font-size: 21px; letter-spacing: .01em;
+}
+.wordmark em { font-style: italic; font-weight: 400; color: var(--accent); transition: color var(--speed); }
+
+.viewnav { display: flex; gap: 4px; margin-left: 8px; }
+.viewnav button {
+  font: inherit; font-size: 13.5px; color: var(--muted);
+  background: none; border: none; cursor: pointer;
+  padding: 5px 12px; border-radius: 99px;
+  white-space: nowrap;
+  transition: color var(--speed), background var(--speed);
+}
+.viewnav button:hover { color: var(--paper); }
+.viewnav button.on { color: var(--paper); background: var(--panel-2); }
+
+.topbar .spacer { flex: 1; }
+
+.identity {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; color: var(--muted);
+}
+.identity .dot { width: 7px; height: 7px; border-radius: 50%; background: #6FA86B; }
+.identity b { color: var(--paper); font-weight: 500; }
+
+.icon-btn {
+  display: grid; place-items: center;
+  width: 32px; height: 32px;
+  color: var(--muted); background: none;
+  border: 1px solid var(--hairline); border-radius: 50%;
+  cursor: pointer; transition: border-color var(--speed), color var(--speed);
+}
+.icon-btn:hover { border-color: var(--faint); color: var(--paper); }
+.icon-btn svg { width: 15px; height: 15px; }
+
+.theme-btn {
+  display: flex; align-items: center; gap: 8px;
+  font: inherit; font-size: 13px; color: var(--muted);
+  background: none; border: 1px solid var(--hairline);
+  padding: 6px 12px; border-radius: 99px; cursor: pointer;
+  white-space: nowrap;
+  transition: border-color var(--speed), color var(--speed);
+}
+.theme-btn:hover { border-color: var(--faint); color: var(--paper); }
+.theme-btn .sw {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--accent); transition: background var(--speed);
+}
+
+/* ---------- 主题面板 ---------- */
+.theme-panel {
+  position: fixed; top: 68px; right: 28px; z-index: 50;
+  width: 264px; background: var(--panel-2);
+  border: 1px solid var(--hairline); border-radius: 10px;
+  padding: 18px; display: none;
+  box-shadow: var(--toast-shadow);
+}
+.theme-panel.open { display: block; }
+.theme-panel h3 { font-size: 13px; font-weight: 500; margin-bottom: 12px; }
+.theme-panel .presets { display: flex; gap: 10px; margin-bottom: 14px; }
+.theme-panel .presets button {
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 2px solid transparent; cursor: pointer; padding: 0;
+  transition: transform var(--speed), border-color var(--speed);
+}
+.theme-panel .presets button:hover { transform: scale(1.12); }
+.theme-panel .presets button.on { border-color: var(--paper); }
+.theme-panel .custom { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--muted); }
+.theme-panel input[type="color"] {
+  width: 34px; height: 26px; border: 1px solid var(--hairline);
+  border-radius: 5px; background: var(--panel); cursor: pointer; padding: 2px;
+}
+.theme-panel .note { margin-top: 12px; font-size: 11.5px; color: var(--faint); line-height: 1.5; }
+
+/* ---------- 大厅 ---------- */
+.view { display: none; }
+.view.on { display: block; }
+
+.eyebrow {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--faint); margin-bottom: 10px;
+}
+.lobby-head h1 {
+  font-family: var(--font-display); font-weight: 600;
+  font-size: 40px; line-height: 1.15; letter-spacing: -.01em;
+}
+.lobby-head p { color: var(--muted); margin-top: 8px; font-size: 14.5px; }
+.lobby-head { margin-bottom: 34px; }
+
+.rooms { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+
+.room-card {
+  display: block; text-decoration: none; color: inherit;
+  background: var(--panel); border: 1px solid var(--hairline);
+  border-radius: var(--radius); padding: 18px 18px 14px;
+  transition: border-color var(--speed), background var(--speed);
+  cursor: pointer;
+}
+.room-card:hover { border-color: var(--faint); background: var(--panel-2); }
+.room-card h2 { font-family: var(--font-display); font-size: 20px; font-weight: 600; }
+.room-card .meta { font-size: 12.5px; color: var(--muted); margin-top: 2px; display: flex; gap: 12px; }
+.room-card .meta .live { color: var(--accent); display: inline-flex; align-items: center; gap: 6px; transition: color var(--speed); }
+.room-card .meta .live::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent); animation: pulse 2.4s infinite;
+}
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+
+.np {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 14px; padding-top: 12px;
+  border-top: 1px solid var(--hairline);
+}
+.np .mini { width: 34px; height: 34px; border-radius: 4px; flex: none; }
+.np .t { min-width: 0; flex: 1; }
+.np .t .tt { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.np .t .ta { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.np .bar { height: 2px; background: var(--rail); border-radius: 2px; margin-top: 7px; overflow: hidden; }
+.np .bar i { display: block; height: 100%; background: var(--accent); transition: background var(--speed); }
+.np.idle .t .tt { color: var(--muted); font-size: 13px; }
+.np.idle .cta { font-size: 12px; color: var(--accent); transition: color var(--speed); }
+
+.room-card.ghost {
+  border-style: dashed; background: transparent;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--muted); font-size: 14px; min-height: 148px;
+}
+.room-card.ghost:hover { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+
+/* ---------- 房间 ---------- */
+.roomgrid {
+  display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 28px;
+  align-items: start;
+}
+
+.room-title { display: flex; align-items: baseline; gap: 14px; margin-bottom: 22px; }
+.room-title h1 { font-family: var(--font-display); font-size: 30px; font-weight: 600; }
+.room-title .back { font-size: 13px; color: var(--muted); text-decoration: none; }
+.room-title .back:hover { color: var(--paper); }
+
+/* 舞台 */
+.stage {
+  position: relative; border-radius: 10px;
+  padding: 44px 40px 34px;
+  background: var(--panel);
+  border: 1px solid var(--hairline);
+  overflow: hidden;
+}
+.stage .glow {
+  position: absolute; inset: -30%;
+  background:
+    radial-gradient(42% 46% at 30% 34%, var(--glow-a, #6B5326) 0%, transparent 70%),
+    radial-gradient(40% 44% at 72% 66%, var(--glow-b, #2E4258) 0%, transparent 70%);
+  opacity: var(--glow-opacity); filter: blur(var(--glow-blur));
+  transition: background 600ms ease, opacity 600ms ease;
+  pointer-events: none;
+}
+.stage .inner { position: relative; display: flex; gap: 34px; align-items: flex-end; }
+
+.cover {
+  width: 216px; height: 216px; border-radius: 8px; flex: none;
+  box-shadow: var(--cover-shadow);
+}
+.stage .np-info { min-width: 0; flex: 1; padding-bottom: 4px; }
+.stage .np-info .eyebrow { color: var(--muted); }
+.stage h2.title {
+  font-family: var(--font-display); font-weight: 600;
+  font-size: 34px; line-height: 1.2; letter-spacing: -.01em;
+}
+.stage .artist { color: var(--muted); margin-top: 6px; font-size: 15px; }
+.stage .artist .album { color: var(--faint); }
+.stage .by { margin-top: 10px; font-size: 12.5px; color: var(--faint); }
+.stage .by b { color: var(--muted); font-weight: 500; }
+
+.transport { display: flex; align-items: center; gap: 6px; margin-top: 20px; }
+.transport button {
+  font: inherit; color: var(--muted); background: none;
+  border: 1px solid transparent; border-radius: 6px;
+  width: 34px; height: 34px; display: grid; place-items: center;
+  cursor: pointer; transition: color var(--speed), background var(--speed);
+}
+.transport button:hover { color: var(--paper); background: var(--hover); }
+.transport button svg { width: 17px; height: 17px; }
+.transport .lyrics-btn.on { color: var(--accent); }
+.transport .admin-tag {
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em;
+  color: var(--faint); border: 1px solid var(--hairline);
+  padding: 2px 7px; border-radius: 4px; margin-left: 8px;
+}
+
+.progress { position: relative; margin-top: 26px; }
+.progress .rail { height: 3px; background: var(--rail); border-radius: 3px; overflow: hidden; }
+.progress .rail i {
+  display: block; height: 100%; width: 26%;
+  background: var(--accent); border-radius: 3px;
+  transition: background var(--speed);
+}
+.progress .times {
+  display: flex; justify-content: space-between;
+  font-family: var(--font-mono); font-size: 11.5px;
+  color: var(--muted); margin-top: 7px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 队列：点歌小票 */
+.queue { background: var(--panel); border: 1px solid var(--hairline); border-radius: 10px; }
+.queue header {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 15px 18px 13px; border-bottom: 1px solid var(--hairline);
+}
+.queue header .lbl { font-family: var(--font-mono); font-size: 11px; letter-spacing: .14em; color: var(--faint); }
+.queue header .cnt { font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.ticket {
+  position: relative;
+  display: grid; grid-template-columns: 34px 1fr auto; gap: 12px;
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--hairline);
+  transition: background var(--speed);
+}
+.ticket:last-of-type { border-bottom: none; }
+.ticket:hover { background: var(--panel-2); }
+.ticket .idx {
+  font-family: var(--font-mono); font-size: 12px; color: var(--faint);
+  padding-top: 3px; font-variant-numeric: tabular-nums;
+}
+.ticket .body { min-width: 0; }
+.ticket .tt { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ticket .ta { font-size: 12px; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ticket .who { font-size: 11.5px; color: var(--faint); margin-top: 5px; display: flex; gap: 8px; align-items: center; }
+.ticket .who .name { color: var(--muted); }
+.ticket .who time { font-family: var(--font-mono); font-size: 10.5px; }
+.ticket .side { display: flex; flex-direction: column; align-items: flex-end; justify-content: space-between; }
+.ticket .dur { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ticket .acts { display: flex; gap: 2px; opacity: 0; transition: opacity var(--speed); }
+.ticket:hover .acts, .ticket:focus-within .acts { opacity: 1; }
+.ticket .acts button {
+  font: inherit; color: var(--faint); background: none; border: none;
+  cursor: pointer; padding: 3px 5px; border-radius: 4px; font-size: 12px;
+  transition: color var(--speed), background var(--speed);
+}
+.ticket .acts button:hover { color: var(--paper); background: var(--hover); }
+.ticket .acts button.danger:hover { color: #D05A4E; }
+
+/* 自己点的小票：accent 左缘 */
+.ticket.mine { box-shadow: inset 2px 0 0 var(--accent); }
+.ticket.mine .who .name { color: var(--accent); }
+
+/* 电台补充批次标记 */
+.ticket.radio-fill .who .name { color: var(--faint); font-style: italic; }
+
+.queue .radio-note {
+  padding: 11px 18px; font-size: 12px; color: var(--faint);
+  border-top: 1px dashed var(--hairline);
+  display: flex; align-items: center; gap: 8px;
+}
+.queue .radio-note svg { width: 13px; height: 13px; flex: none; }
+
+/* 底栏：听众 */
+.footbar {
+  display: flex; align-items: center; gap: 18px;
+  margin-top: 22px; padding: 14px 4px 0;
+  border-top: 1px solid var(--hairline);
+  font-size: 13px; color: var(--muted);
+}
+.listeners { display: flex; align-items: center; gap: 10px; }
+.listeners .faces { display: flex; }
+.listeners .face {
+  width: 24px; height: 24px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: 10.5px; color: #131210;
+  border: 2px solid var(--hall); margin-left: -7px;
+}
+.listeners .face:first-child { margin-left: 0; }
+.footbar .sep { width: 1px; height: 14px; background: var(--hairline); }
+
+/* 点歌 CTA */
+.cta-add {
+  font: inherit; font-size: 13.5px; font-weight: 500;
+  color: var(--on-accent); background: var(--accent);
+  border: none; border-radius: 99px; padding: 8px 18px;
+  cursor: pointer; transition: filter var(--speed), background var(--speed), color var(--speed);
+}
+.cta-add:hover { filter: brightness(1.07); }
+
+/* Toast */
+.toast {
+  position: fixed; right: 28px; bottom: 28px;
+  background: var(--panel-2); border: 1px solid var(--hairline);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px; padding: 12px 18px;
+  font-size: 13.5px; display: flex; align-items: center; gap: 12px;
+  box-shadow: var(--toast-shadow);
+}
+
+/* ---------- 响应式 ---------- */
+@media (max-width: 900px) {
+  .roomgrid { grid-template-columns: 1fr; }
+  .stage .inner { flex-direction: column; align-items: flex-start; }
+  .lobby-head h1 { font-size: 30px; }
+  .shell { padding: 0 18px 48px; }
+  .stage { padding: 28px 22px 24px; }
+}
+@media (max-width: 560px) {
+  .topbar { gap: 10px; }
+  .wordmark { font-size: 17px; white-space: nowrap; }
+  .viewnav button { padding: 4px 8px; font-size: 12.5px; }
+  .identity { display: none; }          /* 窄屏身份入口移入菜单 */
+  .theme-btn .lbl { display: none; }    /* 窄屏只留色点 */
+  .toast { left: 16px; right: 16px; bottom: 16px; }
+  .stage h2.title { font-size: 27px; }
+  .cover { width: 168px; height: 168px; }
+}
+
+/* ---------- 减少动态 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <div class="topbar">
+    <div class="wordmark">Yuzu <em>Jukebox</em></div>
+    <nav class="viewnav">
+      <button class="on" data-view="lobby">大厅</button>
+      <button data-view="room">房间 · 演示</button>
+    </nav>
+    <div class="spacer"></div>
+    <div class="identity"><span class="dot"></span><b>阿柚</b> · room_admin</div>
+    <button class="icon-btn" id="schemeBtn" title="切换深色 / 浅色">
+      <svg id="schemeIconDark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg>
+      <svg id="schemeIconLight" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+    </button>
+    <button class="theme-btn" id="themeBtn"><span class="sw"></span><span class="lbl">主题色</span></button>
+  </div>
+
+  <!-- ============ 大厅 ============ -->
+  <section class="view on" id="view-lobby">
+    <div class="lobby-head">
+      <div class="eyebrow">Lobby · 大厅</div>
+      <h1>今晚去哪一间？</h1>
+      <p>3 个房间开放中 · 共 21 人在听</p>
+    </div>
+    <div class="rooms">
+      <a class="room-card" href="#" onclick="switchView('room');return false">
+        <h2>深夜电台</h2>
+        <div class="meta"><span class="live">播放中</span><span>8 人在听</span></div>
+        <div class="np">
+          <div class="mini" style="background:linear-gradient(135deg,#C88F3D,#4A6B8A)"></div>
+          <div class="t">
+            <div class="tt">海阔天空</div>
+            <div class="ta">Beyond · 乐与怒</div>
+            <div class="bar"><i style="width:26%"></i></div>
+          </div>
+        </div>
+      </a>
+      <a class="room-card" href="#" onclick="switchView('room');return false">
+        <h2>工位背景音</h2>
+        <div class="meta"><span class="live">播放中</span><span>11 人在听</span></div>
+        <div class="np">
+          <div class="mini" style="background:linear-gradient(135deg,#8A4A6B,#2E4258)"></div>
+          <div class="t">
+            <div class="tt">夜に駆ける</div>
+            <div class="ta">YOASOBI · THE BOOK</div>
+            <div class="bar"><i style="width:61%"></i></div>
+          </div>
+        </div>
+      </a>
+      <a class="room-card" href="#" onclick="switchView('room');return false">
+        <h2>老歌重修课</h2>
+        <div class="meta"><span style="color:var(--faint)">空闲</span><span>2 人在听</span></div>
+        <div class="np idle">
+          <div class="t">
+            <div class="tt">队列空了</div>
+            <div class="ta"><span class="cta">来点第一首歌 →</span></div>
+          </div>
+        </div>
+      </a>
+      <a class="room-card ghost" href="#" onclick="return false">+ 创建房间</a>
+    </div>
+  </section>
+
+  <!-- ============ 房间 ============ -->
+  <section class="view" id="view-room">
+    <div class="room-title">
+      <a class="back" href="#" onclick="switchView('lobby');return false">← 大厅</a>
+      <h1>深夜电台</h1>
+      <button class="cta-add" style="margin-left:auto" onclick="return false">+ 点歌</button>
+    </div>
+
+    <div class="roomgrid">
+      <div>
+        <div class="stage" id="stage">
+          <div class="glow" id="glow"></div>
+          <div class="inner">
+            <div class="cover" id="cover" style="background:linear-gradient(135deg,#C88F3D 0%,#8A5A2E 45%,#4A6B8A 100%)"></div>
+            <div class="np-info">
+              <div class="eyebrow">Now Playing · 正在播放</div>
+              <h2 class="title">海阔天空</h2>
+              <div class="artist">Beyond <span class="album">· 乐与怒 · 1993</span></div>
+              <div class="by"><b>阿柚</b> 点 · 21:03 入场</div>
+              <div class="transport">
+                <button title="暂停 (room_admin)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg></button>
+                <button title="切歌 (room_admin)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6l8.5 6L6 18V6zm10.5 0H19v12h-2.5z"/></svg></button>
+                <button class="lyrics-btn on" title="歌词"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V6l10-2v11M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zm10-3a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/></svg></button>
+                <span class="admin-tag">ADMIN</span>
+              </div>
+            </div>
+          </div>
+          <div class="progress">
+            <div class="rail"><i></i></div>
+            <div class="times"><span>1:24</span><span>5:26</span></div>
+          </div>
+        </div>
+
+        <div class="footbar">
+          <div class="listeners">
+            <div class="faces">
+              <span class="face" style="background:#C88F3D">柚</span>
+              <span class="face" style="background:#7A9BBE">海</span>
+              <span class="face" style="background:#9BBE4A">山</span>
+              <span class="face" style="background:#BE7A6B">风</span>
+            </div>
+            <span>8 人在听</span>
+          </div>
+          <div class="sep"></div>
+          <span style="font-family:var(--font-mono);font-size:12px">♩ 电台 · ncm:fm — 队列见底自动补充</span>
+        </div>
+      </div>
+
+      <div class="queue">
+        <header><span class="lbl">QUEUE · 队列</span><span class="cnt">12 首待播</span></header>
+
+        <div class="ticket mine">
+          <span class="idx">02</span>
+          <div class="body">
+            <div class="tt">光辉岁月</div>
+            <div class="ta">Beyond · 命运派对</div>
+            <div class="who"><span class="name">阿柚（你）</span><time>21:04</time></div>
+          </div>
+          <div class="side">
+            <span class="dur">4:59</span>
+            <div class="acts">
+              <button title="移动 (room_admin)">≡</button>
+              <button class="danger" title="撤下这首">×</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="ticket">
+          <span class="idx">03</span>
+          <div class="body">
+            <div class="tt">夜に駆ける</div>
+            <div class="ta">YOASOBI · THE BOOK</div>
+            <div class="who"><span class="name">海风</span><time>21:05</time></div>
+          </div>
+          <div class="side">
+            <span class="dur">4:21</span>
+            <div class="acts"><button title="移动 (room_admin)">≡</button><button class="danger" title="移除 (room_admin)">×</button></div>
+          </div>
+        </div>
+
+        <div class="ticket">
+          <span class="idx">04</span>
+          <div class="body">
+            <div class="tt">Lemon</div>
+            <div class="ta">米津玄師 · BOOTLEG</div>
+            <div class="who"><span class="name">山雾</span><time>21:07</time></div>
+          </div>
+          <div class="side">
+            <span class="dur">4:16</span>
+            <div class="acts"><button title="移动 (room_admin)">≡</button><button class="danger" title="移除 (room_admin)">×</button></div>
+          </div>
+        </div>
+
+        <div class="ticket radio-fill">
+          <span class="idx">05</span>
+          <div class="body">
+            <div class="tt">Pretender</div>
+            <div class="ta">Official髭男dism · Traveler</div>
+            <div class="who"><span class="name">电台补充</span><time>21:10</time></div>
+          </div>
+          <div class="side">
+            <span class="dur">5:27</span>
+            <div class="acts"><button title="移动 (room_admin)">≡</button><button class="danger" title="移除 (room_admin)">×</button></div>
+          </div>
+        </div>
+
+        <div class="ticket radio-fill">
+          <span class="idx">06</span>
+          <div class="body">
+            <div class="tt">白日</div>
+            <div class="ta">King Gnu · CEREMONY</div>
+            <div class="who"><span class="name">电台补充</span><time>21:10</time></div>
+          </div>
+          <div class="side">
+            <span class="dur">4:45</span>
+            <div class="acts"><button title="移动 (room_admin)">≡</button><button class="danger" title="移除 (room_admin)">×</button></div>
+          </div>
+        </div>
+
+        <div class="radio-note">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="2"/><path d="M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4"/></svg>
+          队列少于 3 首时，电台将自动续播
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- 主题面板 -->
+<div class="theme-panel" id="themePanel">
+  <h3>主题色</h3>
+  <div class="presets" id="presets"></div>
+  <div class="custom">
+    <input type="color" id="customColor" value="#E3B93C">
+    <span>自定义颜色</span>
+  </div>
+  <div class="note">主题色只作用于按钮、当前曲目、进度等界面铬件；舞台辉光始终取自封面，不受主题色影响。设置保存在本机。</div>
+</div>
+
+<div class="toast" id="toastDemo">
+  <span class="n">#13</span><span>已加入队列 · 海阔天空</span>
+</div>
+
+<script>
+/* ---------- 视图切换 ---------- */
+function switchView(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'view-' + name));
+  document.querySelectorAll('.viewnav button').forEach(b => b.classList.toggle('on', b.dataset.view === name));
+  document.getElementById('toastDemo').style.display = name === 'room' ? 'flex' : 'none';
+}
+document.querySelectorAll('.viewnav button').forEach(b => b.addEventListener('click', () => switchView(b.dataset.view)));
+switchView('lobby');
+
+/* ---------- 深浅色方案 ----------
+   默认跟随系统；手动切换后写入 localStorage 锁定。 */
+function effectiveScheme() { return document.documentElement.dataset.scheme; }
+function renderSchemeIcon() {
+  const dark = effectiveScheme() === 'dark';
+  document.getElementById('schemeIconDark').style.display = dark ? '' : 'none';
+  document.getElementById('schemeIconLight').style.display = dark ? 'none' : '';
+}
+document.getElementById('schemeBtn').addEventListener('click', () => {
+  const next = effectiveScheme() === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.scheme = next;
+  localStorage.setItem('yuzu-scheme', next);
+  renderSchemeIcon();
+});
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+  if (!localStorage.getItem('yuzu-scheme')) {
+    document.documentElement.dataset.scheme = e.matches ? 'dark' : 'light';
+    renderSchemeIcon();
+  }
+});
+renderSchemeIcon();
+
+/* ---------- 主题色 ----------
+   运行时只写 --accent；--on-accent 按 YIQ 亮度计算，
+   保证任何用户色上文字可读。生产实现相同。 */
+const PRESETS = [
+  ['柚子黄', '#E3B93C'],
+  ['蜜柑',   '#E0863C'],
+  ['青柚',   '#9BBE4A'],
+  ['黑胶红', '#D05A4E'],
+  ['深夜蓝', '#6A8FD8'],
+  ['紫罗兰', '#A67FD4'],
+];
+
+function onAccentFor(hex) {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  const yiq = (r*299 + g*587 + b*114) / 1000;
+  return yiq >= 150 ? '#1A1607' : '#F5F2EC';
+}
+
+function applyAccent(hex, persist = true) {
+  const root = document.documentElement;
+  root.style.setProperty('--accent', hex);
+  root.style.setProperty('--on-accent', onAccentFor(hex));
+  root.style.setProperty('--accent-soft',  `color-mix(in srgb, ${hex} 13%, transparent)`);
+  root.style.setProperty('--accent-line', `color-mix(in srgb, ${hex} 40%, transparent)`);
+  root.style.setProperty('--ring',        `color-mix(in srgb, ${hex} 55%, transparent)`);
+  document.getElementById('customColor').value = hex;
+  document.querySelectorAll('#presets button').forEach(b => b.classList.toggle('on', b.dataset.hex === hex));
+  if (persist) localStorage.setItem('yuzu-accent', hex);
+}
+
+const presetsEl = document.getElementById('presets');
+PRESETS.forEach(([name, hex]) => {
+  const b = document.createElement('button');
+  b.style.background = hex; b.title = name; b.dataset.hex = hex;
+  b.addEventListener('click', () => applyAccent(hex));
+  presetsEl.appendChild(b);
+});
+document.getElementById('customColor').addEventListener('input', e => applyAccent(e.target.value));
+
+const panel = document.getElementById('themePanel');
+document.getElementById('themeBtn').addEventListener('click', e => { e.stopPropagation(); panel.classList.toggle('open'); });
+document.addEventListener('click', e => { if (!panel.contains(e.target)) panel.classList.remove('open'); });
+
+applyAccent(localStorage.getItem('yuzu-accent') || '#E3B93C', false);
+
+/* ---------- 舞台辉光（模拟封面取色） ---------- */
+document.getElementById('glow').style.setProperty('--glow-a', '#6B5326');
+document.getElementById('glow').style.setProperty('--glow-b', '#2E4258');
+</script>
+</body>
+</html>
