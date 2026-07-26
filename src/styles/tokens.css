@@ -100,6 +100,52 @@ body {
   border-radius: 2px;
 }
 
+/* ---------- 复选框风格化 ---------- */
+.yuzu-checkbox {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  border: 1px solid var(--faint);
+  background: transparent;
+  cursor: pointer;
+  display: inline-grid;
+  place-content: center;
+  flex: none;
+  margin: 0;
+  transition: background var(--speed), border-color var(--speed), opacity var(--speed);
+}
+.yuzu-checkbox:hover:not(:disabled) {
+  border-color: var(--muted);
+}
+.yuzu-checkbox:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.yuzu-checkbox:checked::after {
+  content: "";
+  width: 9px;
+  height: 9px;
+  background: var(--on-accent);
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+}
+.yuzu-checkbox:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ---------- 数字输入框：隐藏原生步进箭头 ---------- */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 /* ---------- 工具类 ---------- */
 .no-scrollbar {
   scrollbar-width: none;

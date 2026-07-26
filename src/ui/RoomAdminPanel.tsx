@@ -11,6 +11,9 @@ import { useToast } from './toast';
 const INFINITE_SOURCE_RE = /^(ncm:fm|ncm:simi:|ncm:heart:)/;
 const RADIO_SHORTCUTS = ['ncm:fm', 'ncm:daily'] as const;
 const QUEUE_LIMIT_ROLES = ['guest', 'requester', 'room_admin', 'media_admin'] as const;
+const HISTORY_PAGE = 50;
+const STATS_DEFAULT = 20;
+const STATS_MAX = 100;
 
 type QueueLimitRole = (typeof QUEUE_LIMIT_ROLES)[number];
 type HistoryTab = 'history' | 'stats';
@@ -46,6 +49,9 @@ export function RoomAdminPanel({ roomId, radio }: { roomId: string; radio: Radio
   const [loadFailed, setLoadFailed] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[] | null>(null);
   const [stats, setStats] = useState<StatsEntry[] | null>(null);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+  const [historyBusy, setHistoryBusy] = useState(false);
+  const [statsExpanded, setStatsExpanded] = useState(false);
   const [historyTab, setHistoryTab] = useState<HistoryTab>('history');
 
   const [radioSource, setRadioSource] = useState(radio?.source ?? '');
@@ -81,7 +87,7 @@ export function RoomAdminPanel({ roomId, radio }: { roomId: string; radio: Radio
     setHistory(null);
     setStats(null);
 
-    Promise.all([api.listRooms(), api.roomHistory(roomId), api.roomStats(roomId)])
+    Promise.all([api.listRooms(), api.roomHistory(roomId, 0, HISTORY_PAGE), api.roomStats(roomId, STATS_DEFAULT)])
       .then(([rooms, nextHistory, nextStats]) => {
         if (cancelled) return;
         const room = rooms.find((item) => item.id === roomId);
@@ -97,7 +103,9 @@ export function RoomAdminPanel({ roomId, radio }: { roomId: string; radio: Radio
             .map(([role, value]) => ({ role: role as QueueLimitRole, value: String(value) })),
         );
         setHistory(nextHistory);
+        setHistoryHasMore(nextHistory.length >= HISTORY_PAGE);
         setStats(nextStats);
+        setStatsExpanded(false);
       })
       .catch((error: unknown) => {
         if (cancelled) return;
@@ -115,6 +123,29 @@ export function RoomAdminPanel({ roomId, radio }: { roomId: string; radio: Radio
 
   const selectedRoles = new Set(queueLimits.map((row) => row.role));
   const nextRole = QUEUE_LIMIT_ROLES.find((role) => !selectedRoles.has(role));
+
+  const loadMoreHistory = async () => {
+    if (historyBusy || !history) return;
+    setHistoryBusy(true);
+    try {
+      const more = await api.roomHistory(roomId, history.length, HISTORY_PAGE);
+      setHistory((current) => [...(current ?? []), ...more]);
+      setHistoryHasMore(more.length >= HISTORY_PAGE);
+    } catch (error: unknown) {
+      showError(error);
+    } finally {
+      setHistoryBusy(false);
+    }
+  };
+
+  const expandStats = async () => {
+    try {
+      setStats(await api.roomStats(roomId, STATS_MAX));
+      setStatsExpanded(true);
+    } catch (error: unknown) {
+      showError(error);
+    }
+  };
 
   return (
     <section className="mt-4 overflow-hidden rounded-lg border border-hairline bg-panel">
@@ -162,6 +193,7 @@ export function RoomAdminPanel({ roomId, radio }: { roomId: string; radio: Radio
               <form
                 onSubmit={(event) => {
                   event.preventDefault();
+                  if (radio) return; // 电台开启中：单按钮语义，先停再开
                   const source = radioSource.trim();
                   if (!source || radioBusy) return;
                   setRadioBusy('start');
@@ -202,23 +234,23 @@ export function RoomAdminPanel({ roomId, radio }: { roomId: string; radio: Radio
                 </div>
 
                 <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-[13px]">
-                  <label className={infiniteSource ? 'text-faint' : 'text-muted'}>
+                  <label className={`flex items-center gap-2 ${infiniteSource ? 'text-faint' : 'text-muted'}`}>
                     <input
                       type="checkbox"
                       checked={radioShuffle}
                       disabled={infiniteSource}
                       onChange={(event) => setRadioShuffle(event.target.checked)}
-                      className="mr-2 accent-[var(--accent)] disabled:opacity-40"
+                      className="yuzu-checkbox"
                     />
                     {t('roomAdmin.radioShuffle')}
                   </label>
-                  <label className={infiniteSource ? 'text-faint' : 'text-muted'}>
+                  <label className={`flex items-center gap-2 ${infiniteSource ? 'text-faint' : 'text-muted'}`}>
                     <input
                       type="checkbox"
                       checked={radioOnce}
                       disabled={infiniteSource}
                       onChange={(event) => setRadioOnce(event.target.checked)}
-                      className="mr-2 accent-[var(--accent)] disabled:opacity-40"
+                      className="yuzu-checkbox"
                     />
                     {t('roomAdmin.radioOnce')}
                   </label>
@@ -226,29 +258,32 @@ export function RoomAdminPanel({ roomId, radio }: { roomId: string; radio: Radio
                 {infiniteSource && <p className="mt-2 text-xs text-accent">{t('roomAdmin.radioInfiniteHint')}</p>}
 
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <button
-                    type="submit"
-                    disabled={!radioSource.trim() || radioBusy !== null}
-                    className="rounded-full bg-accent px-4 py-1.5 text-[13px] font-medium text-on-accent hover:brightness-105 disabled:opacity-40"
-                  >
-                    {radioBusy === 'start' ? t('roomAdmin.radioStarting') : t('roomAdmin.radioStart')}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!radio || radioBusy !== null}
-                    onClick={() => {
-                      if (radioBusy) return;
-                      setRadioBusy('stop');
-                      void roomStore
-                        .radioStop()
-                        .then(() => show(t('roomAdmin.radioStopped')))
-                        .catch(showError)
-                        .finally(() => setRadioBusy(null));
-                    }}
-                    className="rounded-full border border-hairline px-4 py-1.5 text-[13px] text-muted hover:border-faint hover:text-paper disabled:opacity-40"
-                  >
-                    {radioBusy === 'stop' ? t('roomAdmin.radioStopping') : t('roomAdmin.radioStop')}
-                  </button>
+                  {radio ? (
+                    <button
+                      type="button"
+                      disabled={radioBusy !== null}
+                      onClick={() => {
+                        if (radioBusy) return;
+                        setRadioBusy('stop');
+                        void roomStore
+                          .radioStop()
+                          .then(() => show(t('roomAdmin.radioStopped')))
+                          .catch(showError)
+                          .finally(() => setRadioBusy(null));
+                      }}
+                      className="rounded-full border border-hairline px-4 py-1.5 text-[13px] text-muted hover:border-[#D05A4E] hover:text-[#D05A4E] disabled:opacity-40"
+                    >
+                      {radioBusy === 'stop' ? t('roomAdmin.radioStopping') : t('roomAdmin.radioStop')}
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      disabled={!radioSource.trim() || radioBusy !== null}
+                      className="rounded-full bg-accent px-4 py-1.5 text-[13px] font-medium text-on-accent hover:brightness-105 disabled:opacity-40"
+                    >
+                      {radioBusy === 'start' ? t('roomAdmin.radioStarting') : t('roomAdmin.radioStart')}
+                    </button>
+                  )}
                 </div>
               </form>
             </section>
@@ -427,6 +462,16 @@ export function RoomAdminPanel({ roomId, radio }: { roomId: string; radio: Radio
                           ))}
                         </tbody>
                       </table>
+                      {historyHasMore && (
+                        <button
+                          type="button"
+                          onClick={() => void loadMoreHistory()}
+                          disabled={historyBusy}
+                          className="w-full border-t border-hairline py-2.5 text-xs text-accent disabled:opacity-40"
+                        >
+                          {historyBusy ? t('common.loading') : t('roomAdmin.loadMore')}
+                        </button>
+                      )}
                     </div>
                   ) : (
                     history && <p className="py-8 text-center text-sm text-faint">{t('roomAdmin.historyEmpty')}</p>
@@ -458,6 +503,15 @@ export function RoomAdminPanel({ roomId, radio }: { roomId: string; radio: Radio
                           ))}
                         </tbody>
                       </table>
+                      {!statsExpanded && stats.length >= STATS_DEFAULT && (
+                        <button
+                          type="button"
+                          onClick={() => void expandStats()}
+                          className="w-full border-t border-hairline py-2.5 text-xs text-accent"
+                        >
+                          {t('roomAdmin.showAll')}
+                        </button>
+                      )}
                     </div>
                   ) : (
                     stats && <p className="py-8 text-center text-sm text-faint">{t('roomAdmin.statsEmpty')}</p>

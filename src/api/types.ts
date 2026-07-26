@@ -165,6 +165,13 @@ export interface CacheOverview {
   entries: CacheEntry[];
   downloads: DownloadStatus[];
   history: DownloadStatus[];
+  total_bytes: number;
+  max_bytes: number;
+}
+
+export interface PruneResult {
+  evicted: number;
+  freed_bytes: number;
 }
 
 export interface CredentialResult {

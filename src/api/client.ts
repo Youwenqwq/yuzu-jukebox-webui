@@ -20,6 +20,7 @@ import type {
   PlaylistDetail,
   PlaylistInfo,
   ProviderInfo,
+  PruneResult,
   QrLoginPollResult,
   QrLoginStartResult,
   RoomInfo,
@@ -264,6 +265,13 @@ export class ApiClient {
       `/api/v1/media/cache/${encodeURIComponent(trackRef)}`,
       { method: 'DELETE' },
     );
+  }
+
+  async pruneCache(unusedDays: number): Promise<PruneResult> {
+    return this.#json<PruneResult>('/api/v1/media/cache/prune', {
+      method: 'POST',
+      body: JSON.stringify({ unused_days: unusedDays }),
+    });
   }
 
   async setCredential(providerId: string, payload: string): Promise<CredentialResult> {

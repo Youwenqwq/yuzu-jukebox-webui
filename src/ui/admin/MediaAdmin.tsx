@@ -41,6 +41,10 @@ export default function MediaAdmin() {
   const [mediaBusy, setMediaBusy] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<LocalMediaInfo | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [mediaExpanded, setMediaExpanded] = useState(false);
+  const [pruneOpen, setPruneOpen] = useState(false);
+  const [pruneDays, setPruneDays] = useState('7');
+  const [pruneBusy, setPruneBusy] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadArtist, setUploadArtist] = useState('');
@@ -71,7 +75,7 @@ export default function MediaAdmin() {
     try {
       setCache(await api.listCache());
     } catch (error: unknown) {
-      setCache({ entries: [], downloads: [], history: [] });
+      setCache({ entries: [], downloads: [], history: [], total_bytes: 0, max_bytes: 0 });
       showError(error);
     } finally {
       setCacheBusy(false);
@@ -99,6 +103,22 @@ export default function MediaAdmin() {
       clearInterval(qrInterval.current);
     };
   }, [loadCache, loadProviders, loadMedia]);
+
+  const runPrune = async () => {
+    const days = Math.max(0, Math.floor(Number(pruneDays) || 0));
+    if (pruneBusy) return;
+    setPruneBusy(true);
+    try {
+      const result = await api.pruneCache(days);
+      show(t('admin.media.prunedToast', { count: result.evicted, freed: formatBytes(result.freed_bytes) }));
+      setPruneOpen(false);
+      await loadCache();
+    } catch (error: unknown) {
+      showError(error);
+    } finally {
+      setPruneBusy(false);
+    }
+  };
 
   const confirmDeleteMedia = async () => {
     if (!deleteTarget || deleting) return;
@@ -313,7 +333,7 @@ export default function MediaAdmin() {
                 </tr>
               </thead>
               <tbody>
-                {media.map((item) => (
+                {(mediaExpanded ? media : media.slice(0, 10)).map((item) => (
                   <tr key={item.track_ref} className="border-b border-hairline last:border-b-0 hover:bg-panel-2">
                     <td className="max-w-[220px] truncate px-3 py-2.5">{item.title}</td>
                     <td className="max-w-[160px] truncate px-3 py-2.5 text-muted">{item.artist || t('admin.common.none')}</td>
@@ -334,6 +354,15 @@ export default function MediaAdmin() {
                 ))}
               </tbody>
             </table>
+            {!mediaExpanded && media.length > 10 && (
+              <button
+                type="button"
+                onClick={() => setMediaExpanded(true)}
+                className="w-full border-t border-hairline py-2.5 text-xs text-accent"
+              >
+                {t('admin.media.showAllCount', { count: media.length })}
+              </button>
+            )}
           </div>
         )}
       </section>
@@ -363,23 +392,27 @@ export default function MediaAdmin() {
                     <div className="font-mono text-sm font-medium">{provider.id}</div>
                     <div className="mt-0.5 text-xs text-muted">{t(statusKey)}</div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCredentialPayload('');
-                      setCredentialProvider(provider.id);
-                    }}
-                    className={secondaryButtonClass}
-                  >
-                    {t('admin.media.updateCredential')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void startQrLogin(provider.id)}
-                    className={secondaryButtonClass}
-                  >
-                    {t('admin.media.qrLogin')}
-                  </button>
+                  {provider.credential_status !== undefined && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCredentialPayload('');
+                          setCredentialProvider(provider.id);
+                        }}
+                        className={secondaryButtonClass}
+                      >
+                        {t('admin.media.updateCredential')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void startQrLogin(provider.id)}
+                        className={secondaryButtonClass}
+                      >
+                        {t('admin.media.qrLogin')}
+                      </button>
+                    </>
+                  )}
                 </div>
               );
             })}
@@ -392,10 +425,23 @@ export default function MediaAdmin() {
           <div>
             <h2 className="font-display text-xl font-semibold">{t('admin.media.cacheHeading')}</h2>
             <p className="mt-1 text-sm text-muted">{t('admin.media.cacheIntro')}</p>
+            {cache && (
+              <p className="mt-1 font-mono text-xs text-faint tabular-nums">
+                {t('admin.media.cacheTotal', {
+                  used: formatBytes(cache.total_bytes),
+                  max: formatBytes(cache.max_bytes),
+                })}
+              </p>
+            )}
           </div>
-          <button type="button" onClick={() => void loadCache()} disabled={cacheBusy} className={secondaryButtonClass}>
-            {cacheBusy ? t('admin.common.working') : t('admin.common.refresh')}
-          </button>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setPruneOpen(true)} className={secondaryButtonClass}>
+              {t('admin.media.pruneAction')}
+            </button>
+            <button type="button" onClick={() => void loadCache()} disabled={cacheBusy} className={secondaryButtonClass}>
+              {cacheBusy ? t('admin.common.working') : t('admin.common.refresh')}
+            </button>
+          </div>
         </div>
 
         {cache === null ? (
@@ -507,9 +553,43 @@ export default function MediaAdmin() {
         </div>
       </Dialog>
 
+      <Dialog
+        open={pruneOpen}
+        onOpenChange={setPruneOpen}
+        title={t('admin.media.pruneTitle')}
+      >
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void runPrune();
+          }}
+        >
+          <label className="block text-xs text-muted">
+            {t('admin.media.pruneDaysLabel')}
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={pruneDays}
+              onChange={(event) => setPruneDays(event.target.value)}
+              className={`${inputClass} mt-1.5`}
+              required
+            />
+          </label>
+          <p className="mt-2 text-xs text-faint">{t('admin.media.pruneNote')}</p>
+          <div className="mt-5 flex justify-end gap-2">
+            <button type="button" onClick={() => setPruneOpen(false)} className={secondaryButtonClass}>
+              {t('common.cancel')}
+            </button>
+            <button type="submit" disabled={pruneBusy} className={primaryButtonClass}>
+              {pruneBusy ? t('admin.common.working') : t('admin.media.pruneConfirm')}
+            </button>
+          </div>
+        </form>
+      </Dialog>
+
       <ConfirmDialog
-        open={deleteTarget !== null}
-        onOpenChange={(open) => {
+        open={deleteTarget !== null}        onOpenChange={(open) => {
           if (!open) setDeleteTarget(null);
         }}
         title={t('admin.media.deleteTitle')}
@@ -533,6 +613,8 @@ function CacheEntries({
   onEvict: (trackRef: string) => void;
 }) {
   const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+  const visibleEntries = expanded ? cache.entries : cache.entries.slice(0, 10);
   return (
     <div>
       <h3 className="mb-2 text-sm font-medium">{t('admin.media.cacheEntriesHeading')}</h3>
@@ -553,7 +635,7 @@ function CacheEntries({
               </tr>
             </thead>
             <tbody>
-              {cache.entries.map((entry) => (
+              {visibleEntries.map((entry) => (
                 <tr key={entry.track_ref} className="border-t border-hairline">
                   <td className="max-w-[300px] truncate px-3 py-2.5 font-mono">{entry.track_ref}</td>
                   <td className="px-3 py-2.5 font-mono tabular-nums text-muted">
@@ -581,6 +663,15 @@ function CacheEntries({
               ))}
             </tbody>
           </table>
+          {!expanded && cache.entries.length > 10 && (
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              className="w-full border-t border-hairline py-2.5 text-xs text-accent"
+            >
+              {t('admin.media.showAllCount', { count: cache.entries.length })}
+            </button>
+          )}
         </div>
       )}
     </div>
