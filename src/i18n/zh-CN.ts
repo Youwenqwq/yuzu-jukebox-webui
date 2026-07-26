@@ -35,6 +35,7 @@ export const zhCN = {
     eyebrow: 'Lobby · 大厅',
     title: '今晚去哪一间？',
     playing: '播放中',
+    paused: '已暂停',
     idle: '空闲',
     listenerCount: '{{count}} 人在听',
     emptyQueue: '队列空了',
@@ -63,6 +64,7 @@ export const zhCN = {
     pause: '暂停',
     resume: '继续播放',
     skip: '切歌',
+    lyrics: '歌词',
     addedToast: '已加入队列 · {{title}}',
   },
   search: {
@@ -70,6 +72,10 @@ export const zhCN = {
     submit: '搜索',
     empty: '没找到，换个词试试',
     add: '点这首歌',
+  },
+  lyrics: {
+    unavailable: '这个来源没有歌词',
+    loading: '歌词加载中…',
   },
   error: {
     unauthorized: '登录已失效，请重新进入',

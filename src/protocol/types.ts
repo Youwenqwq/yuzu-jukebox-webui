@@ -38,6 +38,8 @@ export interface TrackMeta {
   source_url?: string;
   contributors?: Contributor[];
   requested_by: string;
+  /** 点歌人显示名（入队快照；v1 后期新增，旧服务端/旧数据可能缺省 → 降级用 listeners 表或 ID） */
+  requester_name?: string;
   added_at: number;
 }
 

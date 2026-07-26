@@ -5,6 +5,7 @@ import { initTheme } from './app/theme';
 import LoginView from './ui/LoginView';
 import LobbyView from './ui/LobbyView';
 import RoomView from './ui/RoomView';
+import { ToastProvider } from './ui/toast';
 
 initTheme();
 
@@ -21,12 +22,14 @@ export default function App() {
   if (phase === 'login') return <LoginView onDone={() => setPhase('ready')} />;
 
   return (
-    <HashRouter>
-      <Routes>
-        <Route path="/" element={<LobbyView />} />
-        <Route path="/room/:roomId" element={<RoomView />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </HashRouter>
+    <ToastProvider>
+      <HashRouter>
+        <Routes>
+          <Route path="/" element={<LobbyView />} />
+          <Route path="/room/:roomId" element={<RoomView />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </HashRouter>
+    </ToastProvider>
   );
 }

@@ -5,10 +5,23 @@ export interface RoomPolicy {
   queue_limits?: Record<string, number>;
 }
 
+export interface RoomNowPlaying {
+  title: string;
+  artist: string;
+  duration_ms: number;
+  cover_url?: string;
+  position_ms: number;
+  updated_at: number;
+  playing: boolean;
+  rate: number;
+}
+
 export interface RoomInfo {
   id: string;
   name: string;
   policy: RoomPolicy;
+  listener_count: number;
+  now_playing: RoomNowPlaying | null;
 }
 
 export interface SearchTrack {

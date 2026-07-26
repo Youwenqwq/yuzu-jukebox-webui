@@ -1,14 +1,19 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { useEffect, useReducer, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import { YuzuError } from '../protocol/types';
 import type { Playback, QueueEntry, RadioState } from '../protocol/types';
 import type { SearchTrack } from '../api/types';
+import { httpBase } from '../config';
 import { api, client, roomStore, setLastRoom } from '../app/session';
 import { IDLE_PLAYBACK, audio, renderer } from '../app/player';
+import { syncMediaSession } from '../app/mediasession';
+import { activeLineIndex, parseLrc, type LyricLine } from '../player/lyrics';
 import { useConnStatus, useIdentity, useRoomState } from './hooks';
 import { formatClock, formatMs } from './format';
-import { errorKey } from './errors';
+import { extractGlowColors } from './glow';
+import { LyricsPanel } from './LyricsPanel';
+import { useToast } from './toast';
 
 /** 由五元组 + 校时时钟推算"此刻应该放到哪"（spec §2.2） */
 function shouldBe(pb: Playback): number {
@@ -27,14 +32,7 @@ export default function RoomView() {
   const [joinError, setJoinError] = useState<YuzuError | null>(null);
   const [joinPassword, setJoinPassword] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
-  const [toast, setToast] = useState<string | null>(null);
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const showToast = useCallback((msg: string) => {
-    setToast(msg);
-    clearTimeout(toastTimer.current ?? undefined);
-    toastTimer.current = setTimeout(() => setToast(null), 2600);
-  }, []);
+  const { show, showError } = useToast();
 
   // 音频渲染内核：组合根单例，播放状态完全由服务端驱动。
   // 离房时 cleanup 渲染空闲态停止播放，避免旧实例残留发声。
@@ -42,6 +40,21 @@ export default function RoomView() {
   useEffect(() => {
     renderer.render(state.playback);
   }, [renderer, state.playback]);
+
+  // 系统媒体会话（锁屏控制）；播放控制动作仅 room_admin 注入
+  useEffect(() => {
+    syncMediaSession(
+      state.playback,
+      httpBase,
+      isAdminRef.current
+        ? {
+            onPlay: () => void roomStore.resume().catch(() => {}),
+            onPause: () => void roomStore.pause().catch(() => {}),
+            onNextTrack: () => void roomStore.skip().catch(() => {}),
+          }
+        : {},
+    );
+  }, [state.playback]);
 
   useEffect(() => {
     const id = setInterval(() => renderer.tick(), 1000);
@@ -83,18 +96,21 @@ export default function RoomView() {
   }, [roomId, joinPassword]);
 
   const isAdmin = identity?.roles.includes('room_admin') ?? false;
+  const isAdminRef = useRef(isAdmin);
+  isAdminRef.current = isAdmin;
   const current = state.playback.current;
 
-  // requested_by 是身份 ID（spec §4.1）；用听众表 + 自身身份解析显示名，
-  // 点歌人已离场时回退显示 ID。
+  // requested_by 是身份 ID（spec §4.1）；优先用条目自带的 requester_name 快照，
+  // 缺省（旧数据）再查听众表，最后回退显示 ID。
   const nameById = new Map(state.listeners.map((l) => [l.id, l.name]));
   if (identity) nameById.set(identity.id, identity.name);
+  const nameOf = (id: string, snapshot?: string) => snapshot || nameById.get(id) || id;
 
   return (
     <div className="max-w-6xl mx-auto px-7 pb-16">
-      {status === 'reconnecting' && (
+      {(status === 'reconnecting' || status === 'offline') && (
         <div className="bg-accent-soft text-accent text-sm text-center py-1.5 mb-2 rounded">
-          {t('conn.reconnecting')}
+          {t(status === 'offline' ? 'conn.offline' : 'conn.reconnecting')}
         </div>
       )}
 
@@ -131,7 +147,7 @@ export default function RoomView() {
       ) : (
         <div className="grid gap-7 lg:grid-cols-[minmax(0,1fr)_340px] items-start">
           <div>
-            <Stage playback={state.playback} isAdmin={isAdmin} nameById={nameById} />
+            <Stage playback={state.playback} isAdmin={isAdmin} nameOf={nameOf} />
             <ListenersBar />
           </div>
           <QueuePanel
@@ -139,17 +155,13 @@ export default function RoomView() {
             identityId={identity?.id ?? ''}
             isAdmin={isAdmin}
             radio={state.radio}
-            nameById={nameById}
-            onToast={showToast}
+            nameOf={nameOf}
+            onToast={show}
+            onError={showError}
           />
         </div>
       )}
 
-      {toast && (
-        <div className="fixed right-7 bottom-7 bg-panel-2 border border-hairline border-l-[3px] border-l-accent rounded-lg px-4.5 py-3 text-[13.5px] shadow-xl">
-          {toast}
-        </div>
-      )}
       {current === null && <span className="hidden" />}
     </div>
   );
@@ -157,7 +169,9 @@ export default function RoomView() {
 
 // ---------- 舞台 ----------
 
-function Stage({ playback, isAdmin, nameById }: { playback: Playback; isAdmin: boolean; nameById: Map<string, string> }) {
+type NameOf = (id: string, snapshot?: string) => string;
+
+function Stage({ playback, isAdmin, nameOf }: { playback: Playback; isAdmin: boolean; nameOf: NameOf }) {
   const { t } = useTranslation();
   const [, forceTick] = useReducer((x: number) => x + 1, 0);
   useEffect(() => {
@@ -168,6 +182,38 @@ function Stage({ playback, isAdmin, nameById }: { playback: Playback; isAdmin: b
   const current = playback.current;
   const [volume, setVolume] = useState(audio.volume);
 
+  // 封面辉光：取色失败/无封面保持默认色，切歌时保留旧色直至新色就绪（600ms 渐变过渡）
+  const [glow, setGlow] = useState<[string, string] | null>(null);
+
+  // 歌词：换曲目重新拉取；无歌词能力的来源 → 空数组（降级提示）
+  const [lyricsOpen, setLyricsOpen] = useState(false);
+  const [lyrics, setLyrics] = useState<LyricLine[] | null>(null);
+  const [lyricsLoading, setLyricsLoading] = useState(false);
+  const trackRef = current?.track_ref;
+  useEffect(() => {
+    setLyrics(null);
+    if (!trackRef) return;
+    let dead = false;
+    setLyricsLoading(true);
+    api
+      .lyrics(trackRef)
+      .then((res) => {
+        if (!dead) setLyrics(res ? parseLrc(res.lrc, res.tlrc) : []);
+      })
+      .catch(() => {
+        if (!dead) setLyrics([]);
+      })
+      .finally(() => {
+        if (!dead) setLyricsLoading(false);
+      });
+    return () => {
+      dead = true;
+    };
+  }, [trackRef]);
+
+  const pos = current ? Math.max(0, Math.min(shouldBe(playback), current.duration_ms)) : 0;
+  const pct = current && current.duration_ms > 0 ? (pos / current.duration_ms) * 100 : 0;
+
   if (!current) {
     return (
       <div className="bg-panel border border-hairline rounded-lg px-10 py-16 text-center text-muted">
@@ -176,72 +222,104 @@ function Stage({ playback, isAdmin, nameById }: { playback: Playback; isAdmin: b
     );
   }
 
-  const pos = Math.max(0, Math.min(shouldBe(playback), current.duration_ms));
-  const pct = current.duration_ms > 0 ? (pos / current.duration_ms) * 100 : 0;
-
   return (
-    <div className="relative bg-panel border border-hairline rounded-lg px-10 pt-11 pb-8 overflow-hidden">
-      <div className="relative flex gap-8 items-end max-md:flex-col max-md:items-start">
-        {current.cover_url ? (
-          <img
-            src={current.cover_url}
-            alt=""
-            className="w-54 h-54 rounded-lg flex-none object-cover"
-            style={{ boxShadow: 'var(--cover-shadow)', width: 216, height: 216 }}
-          />
-        ) : (
-          <div className="rounded-lg flex-none bg-panel-2" style={{ width: 216, height: 216 }} />
-        )}
-        <div className="min-w-0 flex-1 pb-1">
-          <div className="font-mono text-[11px] tracking-[0.14em] uppercase text-muted mb-2">
-            {t('room.nowPlaying')}
-          </div>
-          <h2 className="font-display text-[34px] font-semibold leading-tight">{current.title}</h2>
-          <div className="text-muted mt-1.5">
-            {current.artist}
-            {current.album && <span className="text-faint"> · {current.album}</span>}
-          </div>
-          <div className="text-faint text-xs mt-2.5">
-            {t('room.requestedBy', { name: nameById.get(current.requested_by) ?? current.requested_by, time: formatClock(current.added_at) })}
-          </div>
+    <div
+      className="relative bg-panel border border-hairline rounded-lg px-10 pt-11 pb-8 overflow-hidden"
+      style={glow ? ({ '--glow-a': glow[0], '--glow-b': glow[1] } as React.CSSProperties) : undefined}
+    >
+      <div
+        className="absolute -inset-[30%] pointer-events-none"
+        style={{
+          background:
+            'radial-gradient(42% 46% at 30% 34%, var(--glow-a, #6B5326) 0%, transparent 70%), radial-gradient(40% 44% at 72% 66%, var(--glow-b, #2E4258) 0%, transparent 70%)',
+          opacity: 'var(--glow-opacity)',
+          filter: 'blur(var(--glow-blur))',
+          transition: 'background 600ms ease',
+        }}
+      />
 
-          <div className="flex items-center gap-1.5 mt-5">
-            {isAdmin && (
-              <>
-                <button
-                  title={playback.playing ? t('room.pause') : t('room.resume')}
-                  onClick={() => void (playback.playing ? roomStore.pause() : roomStore.resume()).catch(() => {})}
-                  className="w-8.5 h-8.5 grid place-items-center rounded-md text-muted hover:text-paper hover:bg-[var(--hover)]"
-                >
-                  {playback.playing ? '⏸' : '▶'}
-                </button>
-                <button
-                  title={t('room.skip')}
-                  onClick={() => void roomStore.skip().catch(() => {})}
-                  className="w-8.5 h-8.5 grid place-items-center rounded-md text-muted hover:text-paper hover:bg-[var(--hover)]"
-                >
-                  ⏭
-                </button>
-              </>
-            )}
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={Math.round(volume * 100)}
-              onChange={(e) => {
-                const v = Number(e.target.value) / 100;
-                setVolume(v);
-                audio.volume = v;
+      {lyricsOpen ? (
+        <div className="relative h-62">
+          {lyricsLoading || lyrics === null ? (
+            <p className="text-faint text-sm text-center pt-24">{t('lyrics.loading')}</p>
+          ) : (
+            <LyricsPanel lines={lyrics} activeIndex={activeLineIndex(lyrics, pos)} emptyText={t('lyrics.unavailable')} />
+          )}
+        </div>
+      ) : (
+        <div className="relative flex gap-8 items-end max-md:flex-col max-md:items-start">
+          {current.cover_url ? (
+            <img
+              src={current.cover_url}
+              alt=""
+              onLoad={(e) => {
+                const colors = extractGlowColors(e.currentTarget);
+                if (colors) setGlow(colors);
               }}
-              title={t('room.volume')}
-              className="w-24 ml-2 accent-[var(--accent)]"
+              className="rounded-lg flex-none object-cover"
+              style={{ boxShadow: 'var(--cover-shadow)', width: 216, height: 216 }}
             />
+          ) : (
+            <div className="rounded-lg flex-none bg-panel-2" style={{ width: 216, height: 216 }} />
+          )}
+          <div className="min-w-0 flex-1 pb-1">
+            <div className="font-mono text-[11px] tracking-[0.14em] uppercase text-muted mb-2">
+              {t('room.nowPlaying')}
+            </div>
+            <h2 className="font-display text-[34px] font-semibold leading-tight">{current.title}</h2>
+            <div className="text-muted mt-1.5">
+              {current.artist}
+              {current.album && <span className="text-faint"> · {current.album}</span>}
+            </div>
+            <div className="text-faint text-xs mt-2.5">
+              {t('room.requestedBy', { name: nameOf(current.requested_by, current.requester_name), time: formatClock(current.added_at) })}
+            </div>
           </div>
         </div>
+      )}
+
+      <div className="relative flex items-center gap-1.5 mt-5">
+        {isAdmin && (
+          <>
+            <button
+              title={playback.playing ? t('room.pause') : t('room.resume')}
+              onClick={() => void (playback.playing ? roomStore.pause() : roomStore.resume()).catch(() => {})}
+              className="w-8.5 h-8.5 grid place-items-center rounded-md text-muted hover:text-paper hover:bg-[var(--hover)]"
+            >
+              {playback.playing ? '⏸' : '▶'}
+            </button>
+            <button
+              title={t('room.skip')}
+              onClick={() => void roomStore.skip().catch(() => {})}
+              className="w-8.5 h-8.5 grid place-items-center rounded-md text-muted hover:text-paper hover:bg-[var(--hover)]"
+            >
+              ⏭
+            </button>
+          </>
+        )}
+        <button
+          title={t('room.lyrics')}
+          onClick={() => setLyricsOpen((v) => !v)}
+          className={`w-8.5 h-8.5 grid place-items-center rounded-md hover:bg-[var(--hover)] ${lyricsOpen ? 'text-accent' : 'text-muted hover:text-paper'}`}
+        >
+          ♪
+        </button>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          value={Math.round(volume * 100)}
+          onChange={(e) => {
+            const v = Number(e.target.value) / 100;
+            setVolume(v);
+            audio.volume = v;
+          }}
+          title={t('room.volume')}
+          className="w-24 ml-2 accent-[var(--accent)]"
+        />
       </div>
 
-      <div className="relative mt-7">
+      <div className="relative mt-5">
         <div
           className="h-[3px] rounded bg-[var(--rail)] overflow-hidden cursor-pointer"
           onClick={(e) => {
@@ -288,15 +366,17 @@ function QueuePanel({
   identityId,
   isAdmin,
   radio,
-  nameById,
+  nameOf,
   onToast,
+  onError,
 }: {
   queue: QueueEntry[];
   identityId: string;
   isAdmin: boolean;
   radio: RadioState | null;
-  nameById: Map<string, string>;
+  nameOf: NameOf;
   onToast: (msg: string) => void;
+  onError: (err: unknown) => void;
 }) {
   const { t } = useTranslation();
   const [searchOpen, setSearchOpen] = useState(false);
@@ -317,14 +397,22 @@ function QueuePanel({
         >
           {t('room.addSong')}
         </button>
-        {searchOpen && <SearchPanel onToast={onToast} />}
+        {searchOpen && <SearchPanel onToast={onToast} onError={onError} />}
       </div>
 
       {queue.length === 0 ? (
         <p className="px-4.5 py-8 text-center text-muted text-sm">{t('room.queueEmpty')}</p>
       ) : (
         queue.map((entry, i) => (
-          <Ticket key={entry.entry_id} entry={entry} index={i + 1} mine={entry.requested_by === identityId} isAdmin={isAdmin} nameById={nameById} />
+          <Ticket
+            key={entry.entry_id}
+            entry={entry}
+            index={i + 1}
+            mine={entry.requested_by === identityId}
+            isAdmin={isAdmin}
+            nameOf={nameOf}
+            onError={onError}
+          />
         ))
       )}
 
@@ -333,10 +421,24 @@ function QueuePanel({
   );
 }
 
-function Ticket({ entry, index, mine, isAdmin, nameById }: { entry: QueueEntry; index: number; mine: boolean; isAdmin: boolean; nameById: Map<string, string> }) {
+function Ticket({
+  entry,
+  index,
+  mine,
+  isAdmin,
+  nameOf,
+  onError,
+}: {
+  entry: QueueEntry;
+  index: number;
+  mine: boolean;
+  isAdmin: boolean;
+  nameOf: NameOf;
+  onError: (err: unknown) => void;
+}) {
   const { t } = useTranslation();
   const canRemove = mine || isAdmin;
-  const requesterName = nameById.get(entry.requested_by) ?? entry.requested_by;
+  const requesterName = nameOf(entry.requested_by, entry.requester_name);
   return (
     <div
       className={`group grid grid-cols-[34px_1fr_auto] gap-3 px-4.5 py-3 border-b border-hairline last:border-b-0 hover:bg-panel-2 ${mine ? 'shadow-[inset_2px_0_0_var(--accent)]' : ''}`}
@@ -360,7 +462,7 @@ function Ticket({ entry, index, mine, isAdmin, nameById }: { entry: QueueEntry; 
         {canRemove && (
           <button
             title={mine ? t('room.removeOwn') : t('room.removeAdmin')}
-            onClick={() => void roomStore.removeQueue(entry.entry_id).catch(() => {})}
+            onClick={() => void roomStore.removeQueue(entry.entry_id).catch(onError)}
             className="text-faint hover:text-[#D05A4E] opacity-0 group-hover:opacity-100 transition-opacity px-1"
           >
             ×
@@ -371,7 +473,7 @@ function Ticket({ entry, index, mine, isAdmin, nameById }: { entry: QueueEntry; 
   );
 }
 
-function SearchPanel({ onToast }: { onToast: (msg: string) => void }) {
+function SearchPanel({ onToast, onError }: { onToast: (msg: string) => void; onError: (err: unknown) => void }) {
   const { t } = useTranslation();
   const [providers, setProviders] = useState<string[]>([]);
   const [provider, setProvider] = useState('');
@@ -443,13 +545,7 @@ function SearchPanel({ onToast }: { onToast: (msg: string) => void }) {
                   void roomStore
                     .addQueue([track.track_ref])
                     .then(() => onToast(t('room.addedToast', { title: track.title })))
-                    .catch((err: unknown) =>
-                      onToast(
-                        t(errorKey(err instanceof YuzuError ? err : new YuzuError('unknown', String(err))), {
-                          message: err instanceof Error ? err.message : '',
-                        }),
-                      ),
-                    )
+                    .catch(onError)
                 }
                 className="text-accent text-lg leading-none px-1.5 hover:brightness-110"
                 title={t('search.add')}
