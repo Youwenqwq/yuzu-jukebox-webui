@@ -31,6 +31,9 @@ src/
   重进房双重播放。**任何视图不得自建内核实例**。
 - **App 根部组成不可丢**：ToastProvider 包裹 login/router 全树（曾重写 App 时误删导致
   全线 useToast 崩溃）；OIDC 回调识别、boot 阶段、identity 置空回登录页也在根部。
+- **覆盖层必须 portal 到 body**：任何 `fixed` 全屏层（FullscreenPlayer、Dialog）走
+  createPortal/radix Portal——祖先的 transform/filter/位移动画会把 fixed 劫持为相对
+  该祖先定位（曾在 view-enter 动画加入后全屏播放页被压缩到页面高度）。
 - **内核不 import React / i18n**；错误一律 `YuzuError(code, message)`，UI 经
   `ui/errors.ts` 的 `errorKey()` 映射到 i18n 文案。
 - **i18n 零硬编码**：所有可见文案必须经 `t()`，新 key 追加到 `i18n/zh-CN.ts`。
