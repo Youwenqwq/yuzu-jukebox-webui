@@ -175,7 +175,7 @@ export default function RoomView() {
         </form>
       ) : (
         <div className="grid gap-7 lg:grid-cols-[minmax(0,1fr)_340px] items-start">
-          <div>
+          <div className="min-w-0">
             <Stage
               playback={state.playback}
               isAdmin={isAdmin}

@@ -141,7 +141,7 @@ export default function PlayerAdmin() {
                 <th className="px-3 py-2 font-medium">{t('admin.players.identity')}</th>
                 <th className="px-3 py-2 font-medium">{t('admin.players.room')}</th>
                 <th className="px-3 py-2 font-medium">{t('admin.players.volume')}</th>
-                <th className="px-3 py-2 font-medium">{t('admin.players.muted')}</th>
+                <th className="px-3 py-2 font-medium">{t('admin.players.sound')}</th>
                 <th className="px-3 py-2 font-medium">{t('admin.players.connectedAt')}</th>
               </tr>
             </thead>
@@ -200,20 +200,18 @@ export default function PlayerAdmin() {
                       <button
                         type="button"
                         role="switch"
-                        aria-checked={player.muted}
-                        aria-label={t('admin.players.muteFor', { device: player.device })}
+                        aria-checked={!player.muted}
+                        aria-label={t('admin.players.soundFor', { device: player.device })}
                         title={!canMute ? t('admin.players.muteUnsupported') : undefined}
                         disabled={!canMute || mutingPlayers.has(player.id)}
                         onClick={() => void setMuted(player, !player.muted)}
-                        className={`relative h-5 w-9 rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
-                          player.muted ? 'border-accent bg-accent' : 'border-hairline bg-[var(--rail)]'
+                        className={`relative h-5 w-9 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
+                          player.muted ? 'border border-hairline bg-[var(--rail)]' : 'bg-accent'
                         }`}
                       >
                         <span
-                          className={`absolute top-0.5 h-3.5 w-3.5 rounded-full transition-transform ${
-                            player.muted
-                              ? 'translate-x-[17px] bg-on-accent'
-                              : 'translate-x-0.5 bg-muted'
+                          className={`absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full transition-[left,background-color] ${
+                            player.muted ? 'left-[3px] bg-muted' : 'left-[19px] bg-on-accent'
                           }`}
                         />
                       </button>
