@@ -3,6 +3,7 @@
  * UI 只经本模块触碰内核，不自行构造内核对象。
  */
 import { ApiClient } from '../api/client';
+import { createOidcFlow } from '../auth/oidc';
 import { createSessionTokenStore } from '../auth/token';
 import { YuzuClient } from '../protocol/client';
 import { SessionStore } from '../protocol/store';
@@ -14,6 +15,7 @@ export const api = new ApiClient(() => tokenStore.get(), {
 });
 export const client = new YuzuClient();
 export const roomStore = new SessionStore(client);
+export const oidcFlow = createOidcFlow();
 
 // ---------- 可观察身份 ----------
 let identity: Identity | null = null;
@@ -76,6 +78,13 @@ export const session = {
 
   async loginGuest(name: string, password?: string): Promise<void> {
     const auth = await api.guestAuth(name, password);
+    tokenStore.set(auth.session_token);
+    await client.connect();
+    setIdentity((await client.authToken(auth.session_token)).identity);
+  },
+
+  async loginOidc(idToken: string, accessToken?: string): Promise<void> {
+    const auth = await api.oidcAuth(idToken, accessToken);
     tokenStore.set(auth.session_token);
     await client.connect();
     setIdentity((await client.authToken(auth.session_token)).identity);

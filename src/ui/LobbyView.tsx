@@ -2,7 +2,7 @@ import { useEffect, useReducer, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import type { RoomInfo } from '../api/types';
-import { api, client } from '../app/session';
+import { api, client, session } from '../app/session';
 import { useIdentity } from './hooks';
 import ThemeControls from './ThemeControls';
 import { ConfirmDialog, Dialog } from './primitives';
@@ -28,6 +28,7 @@ export default function LobbyView() {
           Yuzu <em className="italic font-normal text-accent">Jukebox</em>
         </div>
         <div className="flex-1" />
+        <IdentityChip />
         <AdminEntry />
         <ThemeControls />
       </header>
@@ -55,6 +56,20 @@ export default function LobbyView() {
         {rooms !== null && isRoomAdmin && <CreateRoomCard onCreated={load} />}
         {rooms?.length === 0 && !isRoomAdmin && <p className="text-muted">{t('lobby.noRooms')}</p>}
       </div>
+    </div>
+  );
+}
+
+function IdentityChip() {
+  const { t } = useTranslation();
+  const identity = useIdentity();
+  if (!identity) return null;
+  return (
+    <div className="flex items-center gap-2.5 text-[13px]">
+      <span className="text-muted">{identity.name}</span>
+      <button onClick={() => void session.logout()} className="text-faint hover:text-paper">
+        {t('lobby.logout')}
+      </button>
     </div>
   );
 }

@@ -199,6 +199,8 @@ export const zhCN = {
     namePlaceholder: '你的名字',
     passwordPlaceholder: '管理员口令（可选）',
     submit: '进入',
+    oidcDivider: '或',
+    oidcButton: '使用组织账号登录',
     failed: '登录失败：{{message}}',
   },
   lobby: {
@@ -212,6 +214,7 @@ export const zhCN = {
     firstSong: '来点第一首歌 →',
     createRoom: '+ 创建房间',
     noRooms: '还没有房间，等管理员开一间',
+    logout: '退出登录',
     createRoomHint: '开一个新的听歌空间',
     createRoomTitle: '创建房间',
     roomId: '房间 ID（可选）',

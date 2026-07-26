@@ -1,15 +1,24 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { OidcConfig } from '../api/types';
 import { YuzuError } from '../protocol/types';
-import { session } from '../app/session';
+import { api, oidcFlow, session } from '../app/session';
 import { errorKey } from './errors';
 
-export default function LoginView({ onDone }: { onDone: () => void }) {
+/** Zitadel roles scope：让 roles 随 token 下发，不依赖 console 应用级设置 */
+const OIDC_SCOPES = ['urn:zitadel:iam:org:projects:roles'];
+
+export default function LoginView({ oidcError, onDone }: { oidcError: YuzuError | null; onDone: () => void }) {
   const { t } = useTranslation();
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<YuzuError | null>(null);
+  const [error, setError] = useState<YuzuError | null>(oidcError);
   const [busy, setBusy] = useState(false);
+  const [oidc, setOidc] = useState<OidcConfig | null>(null);
+
+  useEffect(() => {
+    api.oidcConfig().then(setOidc).catch(() => setOidc(null));
+  }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,6 +31,22 @@ export default function LoginView({ onDone }: { onDone: () => void }) {
     } catch (err) {
       setError(err instanceof YuzuError ? err : new YuzuError('unknown', String(err)));
     } finally {
+      setBusy(false);
+    }
+  };
+
+  const startOidc = async () => {
+    if (!oidc || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await oidcFlow.begin(oidc, {
+        scopes: OIDC_SCOPES,
+        clientId: (import.meta.env.VITE_YUZU_OIDC_CLIENT_ID as string | undefined) || undefined,
+      });
+      // 跳转 IdP，不返回
+    } catch (err) {
+      setError(err instanceof YuzuError ? err : new YuzuError('unknown', String(err)));
       setBusy(false);
     }
   };
@@ -56,10 +81,28 @@ export default function LoginView({ onDone }: { onDone: () => void }) {
         <button
           type="submit"
           disabled={!name.trim() || busy}
-          className="w-full bg-accent text-on-accent font-medium rounded-full py-2.5 disabled:opacity-40 hover:brightness-107"
+          className="w-full bg-accent text-on-accent font-medium rounded-full py-2.5 disabled:opacity-40 hover:brightness-105"
         >
           {busy ? t('common.loading') : t('login.submit')}
         </button>
+
+        {oidc && (
+          <>
+            <div className="flex items-center gap-3 my-5 text-faint text-xs">
+              <span className="flex-1 border-t border-hairline" />
+              {t('login.oidcDivider')}
+              <span className="flex-1 border-t border-hairline" />
+            </div>
+            <button
+              type="button"
+              onClick={() => void startOidc()}
+              disabled={busy}
+              className="w-full border border-hairline text-muted rounded-full py-2.5 hover:text-paper hover:border-faint disabled:opacity-40"
+            >
+              {t('login.oidcButton')}
+            </button>
+          </>
+        )}
       </form>
     </div>
   );

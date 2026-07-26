@@ -80,7 +80,9 @@ pnpm build          # tsc -b + vite build
 - [x] Phase C 管理界面：radix-ui primitives（未引 shadcn，见其下）——房间内
       电台/策略/历史、大厅房间建删、/admin 歌单/媒体（上传/本地媒体管理/缓存/凭据扫码）/
       播放端；服务端配套：GET/DELETE /api/v1/media
-- [ ] Phase D OIDC 登录 UI（PKCE 内核就绪，等 IdP 的 PKCE 应用）+ Pages 部署
+- [x] Phase D OIDC 登录 UI（部署由用户自理）：登录页「使用组织账号登录」
+      （服务端 OIDC 启用时出现）、PKCE 回调在 App 启动时识别（redirect_uri = 应用根，
+      code/state 落在 location.search）、请求携带 Zitadel roles scope、大厅身份区退出登录
 
 ## 服务端协同
 
@@ -89,4 +91,7 @@ pnpm build          # tsc -b + vite build
 OIDC 多 audience（extra_client_ids）、rooms 实况摘要、requester_name 快照。
 IdP 侧待办：新增 PKCE(User-Agent)应用 → 其 client_id 加入服务端
 `oidc.extra_client_ids`；roles 进 ID token 用 Application 级 Token Settings
-或 scope `urn:zitadel:iam:org:projects:roles`。
+或 scope `urn:zitadel:iam:org:projects:roles`（WebUI 授权请求已自动携带后者）。
+WebUI 侧配置：`VITE_YUZU_OIDC_CLIENT_ID`（构建期环境变量）指定 PKCE 应用的
+client_id；缺省回退服务端 oidcConfig 的主 client_id。redirect_uri 恒为应用根
+（无路径无 hash），IdP 应用白名单按此登记。
