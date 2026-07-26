@@ -166,7 +166,11 @@ export function RoomAdminPanel({ roomId, radio }: { roomId: string; radio: Radio
                   if (!source || radioBusy) return;
                   setRadioBusy('start');
                   void roomStore
-                    .radioPlay(source, radioShuffle, radioOnce)
+                    .radioPlay(
+                      source,
+                      INFINITE_SOURCE_RE.test(source) ? false : radioShuffle,
+                      INFINITE_SOURCE_RE.test(source) ? false : radioOnce,
+                    )
                     .then(() => show(t('roomAdmin.radioStarted')))
                     .catch(showError)
                     .finally(() => setRadioBusy(null));
@@ -306,8 +310,11 @@ export function RoomAdminPanel({ roomId, radio }: { roomId: string; radio: Radio
                       type="button"
                       disabled={!nextRole}
                       onClick={() => {
-                        if (!nextRole) return;
-                        setQueueLimits((rows) => [...rows, { role: nextRole, value: '0' }]);
+                        setQueueLimits((rows) => {
+                          const usedRoles = new Set(rows.map((row) => row.role));
+                          const role = QUEUE_LIMIT_ROLES.find((item) => !usedRoles.has(item));
+                          return role ? [...rows, { role, value: '0' }] : rows;
+                        });
                       }}
                       className="text-xs text-accent disabled:text-faint"
                     >

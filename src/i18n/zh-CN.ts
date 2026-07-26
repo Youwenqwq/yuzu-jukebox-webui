@@ -268,6 +268,8 @@ export const zhCN = {
     nowPlaying: 'Now Playing · 正在播放',
     requestedBy: '{{name}} 点 · {{time}} 入场',
     volume: '音量',
+    mute: '静音',
+    unmute: '取消静音',
     queueTitle: 'QUEUE · 队列',
     queueCount: '{{count}} 首待播',
     queueEmpty: '队列空了，点第一首歌',

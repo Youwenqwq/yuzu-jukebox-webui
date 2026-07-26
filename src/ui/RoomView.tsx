@@ -16,6 +16,7 @@ import { BatchAddPanel } from './BatchAddPanel';
 import { useToast } from './toast';
 import { RoomAdminPanel } from './RoomAdminPanel';
 import { FullscreenPlayer } from './FullscreenPlayer';
+import { VolumeControl } from './VolumeControl';
 
 /** 由五元组 + 校时时钟推算"此刻应该放到哪"（spec §2.2） */
 function shouldBe(pb: Playback): number {
@@ -239,7 +240,6 @@ function Stage({
   }, []);
 
   const current = playback.current;
-  const [volume, setVolume] = useState(audio.volume);
 
   // 封面辉光：取色失败/无封面保持默认色，切歌时保留旧色直至新色就绪（600ms 渐变过渡）
   const [glow, setGlow] = useState<[string, string] | null>(null);
@@ -336,9 +336,9 @@ function Stage({
         <button
           title={t('room.lyrics')}
           onClick={() => setLyricsOpen((v) => !v)}
-          className={`w-8.5 h-8.5 grid place-items-center rounded-md hover:bg-[var(--hover)] ${lyricsOpen ? 'text-accent' : 'text-muted hover:text-paper'}`}
+          className={`w-8.5 h-8.5 grid place-items-center rounded-md text-[13px] hover:bg-[var(--hover)] ${lyricsOpen ? 'text-accent' : 'text-muted hover:text-paper'}`}
         >
-          ♪
+          词
         </button>
         <button
           title={t('room.expand')}
@@ -349,19 +349,7 @@ function Stage({
             <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
           </svg>
         </button>
-        <input
-          type="range"
-          min={0}
-          max={100}
-          value={Math.round(volume * 100)}
-          onChange={(e) => {
-            const v = Number(e.target.value) / 100;
-            setVolume(v);
-            audio.volume = v;
-          }}
-          title={t('room.volume')}
-          className="w-24 ml-2 accent-[var(--accent)]"
-        />
+        <VolumeControl className="ml-2" />
       </div>
 
       <div className="relative mt-5">

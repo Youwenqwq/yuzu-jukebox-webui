@@ -1,12 +1,12 @@
 import { useEffect, useReducer, useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 import { roomStore, client } from '../app/session';
-import { audio } from '../app/player';
 import type { Playback } from '../protocol/types';
 import type { LyricLine } from '../player/lyrics';
 import { activeLineIndex } from '../player/lyrics';
 import { extractGlowColors } from './glow';
 import { LyricsPanel } from './LyricsPanel';
+import { VolumeControl } from './VolumeControl';
 import { formatClock, formatMs } from './format';
 
 type NameOf = (id: string, snapshot?: string) => string;
@@ -29,7 +29,6 @@ export function FullscreenPlayer(props: {
 
   const [, forceTick] = useReducer((x: number) => x + 1, 0);
   const [glow, setGlow] = useState<[string, string] | null>(null);
-  const [volume, setVolume] = useState(audio.volume);
 
   // 进度/歌词高亮 1s 重算；ESC 关闭；打开期间锁定背景滚动
   useEffect(() => {
@@ -145,19 +144,7 @@ export function FullscreenPlayer(props: {
                 </button>
               </>
             )}
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={Math.round(volume * 100)}
-              onChange={(e) => {
-                const v = Number(e.target.value) / 100;
-                setVolume(v);
-                audio.volume = v;
-              }}
-              title={t('room.volume')}
-              className="w-28 ml-2"
-            />
+            <VolumeControl className="ml-2" />
           </div>
         </div>
 
@@ -166,7 +153,7 @@ export function FullscreenPlayer(props: {
           {lyricsLoading || lines === null ? (
             <p className="text-faint text-sm text-center pt-24">{t('lyrics.loading')}</p>
           ) : (
-            <LyricsPanel lines={lines} activeIndex={activeLineIndex(lines, pos)} emptyText={t('lyrics.unavailable')} />
+            <LyricsPanel lines={lines} activeIndex={activeLineIndex(lines, pos)} emptyText={t('lyrics.unavailable')} large />
           )}
         </div>
       </div>

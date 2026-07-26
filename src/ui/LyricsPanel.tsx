@@ -10,8 +10,10 @@ export function LyricsPanel(props: {
   lines: LyricLine[];
   activeIndex: number;
   emptyText: string;
+  /** 全屏播放页用大字级；舞台小预览默认小字级 */
+  large?: boolean;
 }): JSX.Element {
-  const { lines, activeIndex, emptyText } = props;
+  const { lines, activeIndex, emptyText, large = false } = props;
   const lineRefs = useRef<Array<HTMLLIElement | null>>([]);
 
   useEffect(() => {
@@ -58,14 +60,18 @@ export function LyricsPanel(props: {
             <p
               className={
                 active
-                  ? 'font-display text-lg font-semibold leading-relaxed'
-                  : 'text-[13px] leading-relaxed'
+                  ? `font-display font-semibold leading-relaxed ${large ? 'text-2xl lg:text-3xl' : 'text-lg'}`
+                  : `leading-relaxed ${large ? 'text-[15px]' : 'text-[13px]'}`
               }
             >
               {line.text}
             </p>
             {line.translation !== undefined && (
-              <p className={`mt-0.5 leading-relaxed ${active ? 'text-[13px] text-muted' : 'text-xs'}`}>
+              <p
+                className={`mt-0.5 leading-relaxed ${
+                  active ? `text-muted ${large ? 'text-base' : 'text-[13px]'}` : large ? 'text-sm' : 'text-xs'
+                }`}
+              >
                 {line.translation}
               </p>
             )}
