@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { OidcConfig } from '../api/types';
+import { oidcClientId } from '../config';
 import { YuzuError } from '../protocol/types';
 import { api, oidcFlow, session } from '../app/session';
 import { errorKey } from './errors';
@@ -42,7 +43,7 @@ export default function LoginView({ oidcError, onDone }: { oidcError: YuzuError 
     try {
       await oidcFlow.begin(oidc, {
         scopes: OIDC_SCOPES,
-        clientId: (import.meta.env.VITE_YUZU_OIDC_CLIENT_ID as string | undefined) || undefined,
+        clientId: oidcClientId || undefined,
       });
       // 跳转 IdP，不返回
     } catch (err) {

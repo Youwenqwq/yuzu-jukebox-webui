@@ -3,6 +3,8 @@
  * 与 design/mockup.html 的机制一致：只写 CSS 变量，组件无感知。
  */
 
+import { configuredScheme, defaultAccent } from '../config';
+
 export type Scheme = 'dark' | 'light';
 
 const ACCENT_KEY = 'yuzu-accent';
@@ -37,14 +39,15 @@ export function currentScheme(): Scheme {
 }
 
 export function currentAccent(): string {
-  return localStorage.getItem(ACCENT_KEY) || '#E3B93C';
+  return localStorage.getItem(ACCENT_KEY) || defaultAccent;
 }
 
 /** 应用启动时调用一次：恢复持久化的 accent，挂系统 scheme 监听。 */
 export function initTheme(): void {
   applyAccent(currentAccent(), false);
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-    if (!localStorage.getItem(SCHEME_KEY)) {
+    // 本机锁定或 config 指定 scheme 时，不跟随系统变化
+    if (!localStorage.getItem(SCHEME_KEY) && !configuredScheme) {
       applyScheme(e.matches ? 'dark' : 'light', false);
     }
   });

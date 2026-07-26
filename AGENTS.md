@@ -92,6 +92,10 @@ OIDC 多 audience（extra_client_ids）、rooms 实况摘要、requester_name �
 IdP 侧待办：新增 PKCE(User-Agent)应用 → 其 client_id 加入服务端
 `oidc.extra_client_ids`；roles 进 ID token 用 Application 级 Token Settings
 或 scope `urn:zitadel:iam:org:projects:roles`（WebUI 授权请求已自动携带后者）。
-WebUI 侧配置：`VITE_YUZU_OIDC_CLIENT_ID`（构建期环境变量）指定 PKCE 应用的
-client_id；缺省回退服务端 oidcConfig 的主 client_id。redirect_uri 恒为应用根
-（无路径无 hash），IdP 应用白名单按此登记。
+WebUI 侧配置：`public/config.js`（运行期，部署后可直接编辑无需重建）——
+`server` 服务端基址（空 = 同源）、`oidc_client_id` PKCE 应用 id（空 = 回退服务端
+oidcConfig 主 id）、`title` 网页标题、`favicon` 图标（空 = 内置 favicon.svg）、
+`accent` 默认主题色、`scheme` 默认深浅色（空 = 跟随系统）。
+优先级：server/oidc 为 config.js > VITE_* > 默认；accent/scheme 为
+用户本机选择（localStorage）> config.js > 内置默认。
+redirect_uri 恒为应用根（无路径无 hash），IdP 应用白名单按此登记。
