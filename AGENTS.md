@@ -62,6 +62,8 @@ pnpm build          # tsc -b + vite build
 - pnpm 11 的构建白名单在 `pnpm-workspace.yaml`（`allowBuilds`），不在 package.json。
 - REST 响应均为包装对象：`{rooms:[...]}` `{tracks:[...]}` `{providers:[...]}`——
   不是裸数组（曾误读 jq 报错把 listRooms 改错，已回滚）。
+- `httpBase` 同源部署时是空串：凡需要绝对 URL 的场景（`new URL(path, base)`、
+  Media Session artwork 等）必须 `base || location.origin` 回退。
 
 ## 测试约定
 
