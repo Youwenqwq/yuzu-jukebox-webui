@@ -77,8 +77,9 @@ pnpm build          # tsc -b + vite build
 - [x] Phase A 收听体验：辉光、同步歌词（共用 should_be 时钟）、Media Session、
       Toast 系统、大厅实况（服务端 G1: rooms 带 listener_count/now_playing）
 - [ ] Phase B 队列增强：queue.move 拖拽（admin）、批量入队 UI（内核 batch 已就绪）
-- [ ] Phase C 管理界面：shadcn 引入点——电台控制、房间建删/策略、歌单管理
-      （服务端已有 PATCH items/{ord} move）、凭据/扫码、缓存/播放端/上传、历史热度榜
+- [x] Phase C 管理界面：radix-ui primitives（未引 shadcn，见其下）——房间内
+      电台/策略/历史、大厅房间建删、/admin 歌单/媒体（上传/本地媒体管理/缓存/凭据扫码）/
+      播放端；服务端配套：GET/DELETE /api/v1/media
 - [ ] Phase D OIDC 登录 UI（PKCE 内核就绪，等 IdP 的 PKCE 应用）+ Pages 部署
 
 ## 服务端协同
