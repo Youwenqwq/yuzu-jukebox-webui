@@ -10,6 +10,7 @@ import type {
   DeletePlaylistItemResult,
   HistoryEntry,
   ImportPlaylistInput,
+  ExternalBindingCode,
   LocalMediaInfo,
   IntegrationInfo,
   IntegrationCredentialResult,
@@ -35,6 +36,9 @@ import type {
   RoomControllerGrant,
   RoomInfo,
   RoomMutationResult,
+  RoomOutput,
+  RoomOutputUpdate,
+  RoomPlayerInfo,
   SearchTrack,
   StatsEntry,
   UpdateRoomInput,
@@ -88,6 +92,12 @@ export class ApiClient {
     }
     return this.#readJson<OidcConfig>(response);
   }
+  async issueExternalBindingCode(): Promise<ExternalBindingCode> {
+    return this.#json<ExternalBindingCode>('/api/v1/auth/external-binding-codes', {
+      method: 'POST',
+    });
+  }
+
 
   async logout(): Promise<void> {
     const response = await this.#send('/api/v1/auth/session', { method: 'DELETE' });
@@ -493,6 +503,45 @@ export class ApiClient {
         method: 'POST',
         body: JSON.stringify({ op, value }),
       },
+    );
+  }
+
+  async roomOutput(roomId: string): Promise<RoomOutput> {
+    const result = await this.#json<{ output: RoomOutput }>(
+      `/api/v1/rooms/${encodeURIComponent(roomId)}/output`,
+    );
+    return result.output;
+  }
+
+  async setRoomOutputVolume(roomId: string, volume: number): Promise<RoomOutputUpdate> {
+    return this.#json<RoomOutputUpdate>(
+      `/api/v1/rooms/${encodeURIComponent(roomId)}/output`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ volume }),
+      },
+    );
+  }
+
+  async roomPlayers(roomId: string): Promise<RoomPlayerInfo[]> {
+    const result = await this.#json<{ players: RoomPlayerInfo[] }>(
+      `/api/v1/rooms/${encodeURIComponent(roomId)}/players`,
+    );
+    return result.players;
+  }
+
+  async bindRoomPlayer(roomId: string, playerId: string): Promise<RoomPlayerInfo> {
+    const result = await this.#json<{ player: RoomPlayerInfo }>(
+      `/api/v1/rooms/${encodeURIComponent(roomId)}/players/${encodeURIComponent(playerId)}`,
+      { method: 'PUT' },
+    );
+    return result.player;
+  }
+
+  async unbindRoomPlayer(roomId: string, playerId: string): Promise<void> {
+    await this.#json<{ ok: true }>(
+      `/api/v1/rooms/${encodeURIComponent(roomId)}/players/${encodeURIComponent(playerId)}`,
+      { method: 'DELETE' },
     );
   }
 

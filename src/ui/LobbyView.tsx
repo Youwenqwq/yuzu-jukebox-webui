@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import type { RoomInfo } from '../api/types';
 import { api, client, session } from '../app/session';
 import { useIdentity } from './hooks';
+import ExternalBindingDialog from './ExternalBindingDialog';
 import ThemeControls from './ThemeControls';
 import { ConfirmDialog, Dialog } from './primitives';
 import { useToast } from './toast';
@@ -87,14 +88,29 @@ function greetingKey(): string {
 function IdentityChip() {
   const { t } = useTranslation();
   const identity = useIdentity();
+  const [bindingOpen, setBindingOpen] = useState(false);
   if (!identity) return null;
   return (
-    <div className="flex items-center gap-2.5 text-[13px]">
-      <span className="text-muted">{identity.name}</span>
-      <button onClick={() => void session.logout()} className="text-faint hover:text-paper">
-        {t('lobby.logout')}
-      </button>
-    </div>
+    <>
+      <div className="flex items-center gap-2.5 text-[13px]">
+        <span className="text-muted">{identity.name}</span>
+        {identity.kind === 'oidc' && (
+          <button
+            type="button"
+            onClick={() => setBindingOpen(true)}
+            className="text-faint hover:text-paper"
+          >
+            {t('lobby.externalBinding')}
+          </button>
+        )}
+        <button onClick={() => void session.logout()} className="text-faint hover:text-paper">
+          {t('lobby.logout')}
+        </button>
+      </div>
+      {identity.kind === 'oidc' && (
+        <ExternalBindingDialog open={bindingOpen} onOpenChange={setBindingOpen} />
+      )}
+    </>
   );
 }
 
@@ -128,7 +144,6 @@ function CreateRoomCard({ onCreated }: { onCreated: () => void }) {
         className="min-h-40 rounded-md border border-dashed border-hairline bg-transparent p-5 text-left text-muted transition-colors hover:border-accent hover:bg-panel hover:text-accent"
       >
         <span className="block font-display text-xl font-semibold">{t('lobby.createRoom')}</span>
-        <span className="mt-2 block text-xs text-faint">{t('lobby.createRoomHint')}</span>
       </button>
 
       <Dialog open={open} onOpenChange={setOpen} title={t('lobby.createRoomTitle')}>

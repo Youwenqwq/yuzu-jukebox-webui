@@ -112,11 +112,13 @@ export function Select(props: {
   onValueChange: (value: string) => void;
   options: Array<{ value: string; label: string }>;
   placeholder?: string;
+  ariaLabel?: string;
   className?: string;
 }) {
   return (
     <SelectPrimitive.Root value={props.value} onValueChange={props.onValueChange}>
       <SelectPrimitive.Trigger
+        aria-label={props.ariaLabel}
         className={`inline-flex items-center justify-between gap-2 bg-panel-2 border border-hairline rounded-md px-3 py-1.5 text-[13px] hover:border-faint data-[placeholder]:text-faint ${props.className ?? ''}`}
       >
         <SelectPrimitive.Value placeholder={props.placeholder} />

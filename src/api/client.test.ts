@@ -50,6 +50,25 @@ describe('ApiClient', () => {
     });
     expect(new Headers(oidcInit?.headers).get('Authorization')).toBe('Bearer current-token');
   });
+  it('issues an external binding code with the current OIDC session and no request body', async () => {
+    const issued = { code: '7K3M-9P2D-X4RT', expires_at: 1_720_000_600_000 };
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(issued, 201));
+    const client = new ApiClient(() => 'oidc-session', {
+      base: 'https://yuzu.test',
+      fetchFn,
+    });
+
+    await expect(client.issueExternalBindingCode()).resolves.toEqual(issued);
+
+    const [url, init] = fetchFn.mock.calls[0];
+    expect(url).toBe('https://yuzu.test/api/v1/auth/external-binding-codes');
+    expect(init?.method).toBe('POST');
+    expect(init?.body).toBeUndefined();
+    const headers = new Headers(init?.headers);
+    expect(headers.get('Authorization')).toBe('Bearer oidc-session');
+    expect(headers.has('Content-Type')).toBe(false);
+  });
+
 
   it('maps REST errors and invokes unauthorized cleanup before rejecting a 401', async () => {
     const events: string[] = [];
@@ -216,7 +235,7 @@ describe('ApiClient', () => {
       client.updateRoom(room.id, {
         name: 'Evening',
         guest_password: '',
-        policy: { max_queue: 30 },
+        policy: { max_queue: 30, member_player_volume: true },
       }),
     ).resolves.toEqual({ ...room, name: 'Evening' });
     await expect(client.deleteRoom(room.id)).resolves.toBeUndefined();
@@ -240,7 +259,7 @@ describe('ApiClient', () => {
     expect(JSON.parse(String(updateInit?.body))).toEqual({
       name: 'Evening',
       guest_password: '',
-      policy: '{"max_queue":30}',
+      policy: '{"max_queue":30,"member_player_volume":true}',
     });
     expect(fetchFn.mock.calls[2][0]).toBe(`https://yuzu.test/api/v1/rooms/${encodedRoom}`);
     expect(fetchFn.mock.calls[2][1]?.method).toBe('DELETE');
@@ -468,6 +487,64 @@ describe('ApiClient', () => {
       op: 'join_room',
       value: 'room /一',
     });
+  });
+
+  it('manages room output and multi-player assignments through room-scoped endpoints', async () => {
+    const roomId = 'room /一';
+    const player = {
+      id: 'player / stage',
+      bound: true,
+      online: true,
+      device: 'speaker-01',
+      room_id: roomId,
+      volume: 42,
+      muted: false,
+      identity_name: 'Living Room',
+    };
+    const offlinePlayer = {
+      id: 'living-room-right',
+      bound: true,
+      online: false,
+      volume: 0,
+      muted: false,
+    };
+    const outputUpdate = {
+      output: { volume: 58, updated_at: 1_720_000_600_000 },
+      delivery: { commands_sent: 2 },
+    };
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ output: { volume: null } }))
+      .mockResolvedValueOnce(jsonResponse(outputUpdate))
+      .mockResolvedValueOnce(jsonResponse({ players: [player, offlinePlayer] }))
+      .mockResolvedValueOnce(jsonResponse({ binding: { room_id: roomId, player_id: player.id }, player }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }));
+    const client = new ApiClient(() => 'admin-token', {
+      base: 'https://yuzu.test',
+      fetchFn,
+    });
+
+    await expect(client.roomOutput(roomId)).resolves.toEqual({ volume: null });
+    await expect(client.setRoomOutputVolume(roomId, 58)).resolves.toEqual(outputUpdate);
+    await expect(client.roomPlayers(roomId)).resolves.toEqual([player, offlinePlayer]);
+    await expect(client.bindRoomPlayer(roomId, player.id)).resolves.toEqual(player);
+    await expect(client.unbindRoomPlayer(roomId, player.id)).resolves.toBeUndefined();
+
+    const encodedRoom = 'room%20%2F%E4%B8%80';
+    const encodedPlayer = 'player%20%2F%20stage';
+    expect(fetchFn.mock.calls.map(([url]) => url)).toEqual([
+      `https://yuzu.test/api/v1/rooms/${encodedRoom}/output`,
+      `https://yuzu.test/api/v1/rooms/${encodedRoom}/output`,
+      `https://yuzu.test/api/v1/rooms/${encodedRoom}/players`,
+      `https://yuzu.test/api/v1/rooms/${encodedRoom}/players/${encodedPlayer}`,
+      `https://yuzu.test/api/v1/rooms/${encodedRoom}/players/${encodedPlayer}`,
+    ]);
+    expect(fetchFn.mock.calls[1][1]?.method).toBe('PATCH');
+    expect(JSON.parse(String(fetchFn.mock.calls[1][1]?.body))).toEqual({ volume: 58 });
+    expect(fetchFn.mock.calls[3][1]?.method).toBe('PUT');
+    expect(fetchFn.mock.calls[3][1]?.body).toBeUndefined();
+    expect(new Headers(fetchFn.mock.calls[3][1]?.headers).has('Content-Type')).toBe(false);
+    expect(fetchFn.mock.calls[4][1]?.method).toBe('DELETE');
   });
 
   it('consumes capabilities and integration management wire contracts', async () => {

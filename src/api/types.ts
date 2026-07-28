@@ -3,6 +3,7 @@ import type { Contributor } from '../protocol/types';
 export interface RoomPolicy {
   max_queue?: number;
   queue_limits?: Record<string, number>;
+  member_player_volume?: boolean;
 }
 
 export interface RoomNowPlaying {
@@ -201,6 +202,29 @@ export interface PlayerInfo {
   connected_at: number;
 }
 
+export interface RoomPlayerInfo {
+  id: string;
+  bound: boolean;
+  online: boolean;
+  device?: string;
+  room_id?: string;
+  volume: number;
+  muted: boolean;
+  identity_name?: string;
+}
+
+export interface RoomOutput {
+  volume: number | null;
+  updated_at?: number;
+}
+
+export interface RoomOutputUpdate {
+  output: RoomOutput;
+  delivery: {
+    commands_sent: number;
+  };
+}
+
 export type PlayerCommandOp = 'set_volume' | 'set_mute' | 'join_room';
 
 export interface PlayerCommandResult {
@@ -271,6 +295,11 @@ export interface LyricsResult {
   type: 'lrc';
   lrc: string;
   tlrc?: string;
+}
+
+export interface ExternalBindingCode {
+  code: string;
+  expires_at: number;
 }
 
 export interface OidcConfig {

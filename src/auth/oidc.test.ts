@@ -104,9 +104,13 @@ describe('OIDC Authorization Code + PKCE flow', () => {
       encodeBase64Url(new Uint8Array(digest)),
     );
 
-    await expect(
-      flow.handleCallback(`https://app.example/login?code=auth-code&state=${state}`),
-    ).resolves.toEqual({ idToken: 'signed-id-token', accessToken: 'opaque-access' });
+    const callbackUrl = `https://app.example/login?code=auth-code&state=${state}`;
+    const firstCallback = flow.handleCallback(callbackUrl);
+    const duplicateCallback = flow.handleCallback(callbackUrl);
+    await expect(Promise.all([firstCallback, duplicateCallback])).resolves.toEqual([
+      { idToken: 'signed-id-token', accessToken: 'opaque-access' },
+      { idToken: 'signed-id-token', accessToken: 'opaque-access' },
+    ]);
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const [, tokenInit] = fetchMock.mock.calls[1];

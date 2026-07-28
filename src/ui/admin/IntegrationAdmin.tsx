@@ -1,19 +1,18 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type {
-  IntegrationInfo,
   IntegrationCredentialResult,
+  IntegrationInfo,
   IntegrationScopeBinding,
   IntegrationScopeBindingInfo,
   IntegrationSubjectLink,
   IntegrationSubjectLinkInfo,
-  PrincipalInfo,
-  RoomControllerGrant,
   RoomInfo,
 } from '../../api/types';
 import { api } from '../../app/session';
-import { Select } from '../primitives';
+import { ConfirmDialog, Dialog } from '../primitives';
 import { useToast } from '../toast';
+import { IntegrationScopePanel, IntegrationSubjectPanel } from './IntegrationMappingPanels';
 
 const inputClass =
   'mt-1.5 w-full rounded-md border border-hairline bg-panel px-3 py-2 text-[13px] placeholder:text-faint';
@@ -21,8 +20,8 @@ const primaryButtonClass =
   'rounded-full bg-accent px-4 py-2 text-[13px] font-medium text-on-accent hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-40';
 const secondaryButtonClass =
   'rounded-full border border-hairline px-4 py-1.5 text-[13px] text-muted hover:border-faint hover:text-paper disabled:cursor-not-allowed disabled:opacity-40';
-const removeButtonClass =
-  'rounded-full border border-hairline px-3 py-1 text-xs text-muted hover:border-[#D05A4E] hover:text-[#D05A4E] disabled:cursor-not-allowed disabled:opacity-40';
+const dangerButtonClass =
+  'rounded-full border border-hairline px-4 py-1.5 text-[13px] text-muted hover:border-[#D05A4E] hover:text-[#D05A4E] disabled:cursor-not-allowed disabled:opacity-40';
 
 type BusyAction =
   | 'integration-create'
@@ -33,64 +32,45 @@ type BusyAction =
   | 'scope-save'
   | `scope-delete:${string}`
   | 'subject-save'
-  | `subject-delete:${string}`
-  | 'grant-save'
-  | `grant-delete:${string}`;
+  | `subject-delete:${string}`;
+type ConfirmAction = 'disable' | 'rotate' | 'delete';
 
 export default function IntegrationAdmin() {
   const { t } = useTranslation();
   const { show, showError } = useToast();
   const [integrations, setIntegrations] = useState<IntegrationInfo[] | null>(null);
   const [rooms, setRooms] = useState<RoomInfo[]>([]);
-  const [principals, setPrincipals] = useState<PrincipalInfo[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogFailed, setCatalogFailed] = useState(false);
   const [integrationId, setIntegrationId] = useState('');
+  const [integrationFilter, setIntegrationFilter] = useState('');
+  const [integrationName, setIntegrationName] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
   const [newIntegrationId, setNewIntegrationId] = useState('');
   const [newIntegrationName, setNewIntegrationName] = useState('');
-  const [integrationName, setIntegrationName] = useState('');
   const [revealedToken, setRevealedToken] = useState<{ id: string; token: string } | null>(null);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  const [busy, setBusy] = useState<BusyAction | null>(null);
 
   const [scopes, setScopes] = useState<IntegrationScopeBindingInfo[] | null>(null);
   const [subjects, setSubjects] = useState<IntegrationSubjectLinkInfo[] | null>(null);
   const [integrationDataFailed, setIntegrationDataFailed] = useState(false);
   const [integrationVersion, setIntegrationVersion] = useState(0);
 
-  const [grantRoomId, setGrantRoomId] = useState('');
-  const [grants, setGrants] = useState<RoomControllerGrant[] | null>(null);
-  const [grantsFailed, setGrantsFailed] = useState(false);
-  const [grantVersion, setGrantVersion] = useState(0);
-  const [busy, setBusy] = useState<BusyAction | null>(null);
-
-  const [scopeAdapterId, setScopeAdapterId] = useState('');
-  const [scopeType, setScopeType] = useState('');
-  const [scopeId, setScopeId] = useState('');
-  const [scopeRoomId, setScopeRoomId] = useState('');
-
-  const [subjectAdapterId, setSubjectAdapterId] = useState('');
-  const [subjectScopeType, setSubjectScopeType] = useState('');
-  const [subjectScopeId, setSubjectScopeId] = useState('');
-  const [subjectId, setSubjectId] = useState('');
-  const [subjectPrincipalId, setSubjectPrincipalId] = useState('');
-  const [grantPrincipalId, setGrantPrincipalId] = useState('');
-
   const loadCatalog = useCallback(async () => {
     setCatalogLoading(true);
     setCatalogFailed(false);
     try {
-      const [nextIntegrations, nextRooms, nextPrincipals] = await Promise.all([
+      const [nextIntegrations, nextRooms] = await Promise.all([
         api.listIntegrations(),
         api.listRooms(),
-        api.listPrincipals(undefined, 100),
       ]);
       setIntegrations(nextIntegrations);
       setRooms(nextRooms);
-      setPrincipals(nextPrincipals);
       setIntegrationId((current) =>
-        nextIntegrations.some((item) => item.id === current) ? current : (nextIntegrations[0]?.id ?? ''),
-      );
-      setGrantRoomId((current) =>
-        nextRooms.some((room) => room.id === current) ? current : (nextRooms[0]?.id ?? ''),
+        nextIntegrations.some((item) => item.id === current)
+          ? current
+          : (nextIntegrations[0]?.id ?? ''),
       );
     } catch (error: unknown) {
       setCatalogFailed(true);
@@ -105,28 +85,6 @@ export default function IntegrationAdmin() {
   }, [loadCatalog]);
 
   useEffect(() => {
-    setScopeRoomId((current) =>
-      rooms.some((room) => room.id === current) ? current : (rooms[0]?.id ?? ''),
-    );
-    setGrantRoomId((current) =>
-      rooms.some((room) => room.id === current) ? current : (rooms[0]?.id ?? ''),
-    );
-  }, [rooms]);
-
-  useEffect(() => {
-    setSubjectPrincipalId((current) =>
-      principals.some((principal) => principal.id === current)
-        ? current
-        : (principals[0]?.id ?? ''),
-    );
-    setGrantPrincipalId((current) =>
-      principals.some((principal) => principal.id === current)
-        ? current
-        : (principals[0]?.id ?? ''),
-    );
-  }, [principals]);
-
-  useEffect(() => {
     if (!integrationId) {
       setScopes([]);
       setSubjects([]);
@@ -138,7 +96,7 @@ export default function IntegrationAdmin() {
     setScopes(null);
     setSubjects(null);
     setIntegrationDataFailed(false);
-    Promise.all([
+    void Promise.all([
       api.listIntegrationScopes(integrationId),
       api.listIntegrationSubjects(integrationId),
     ])
@@ -157,67 +115,39 @@ export default function IntegrationAdmin() {
     };
   }, [integrationId, integrationVersion, showError]);
 
-  useEffect(() => {
-    if (!grantRoomId) {
-      setGrants([]);
-      setGrantsFailed(false);
-      return;
-    }
-
-    let cancelled = false;
-    setGrants(null);
-    setGrantsFailed(false);
-    api
-      .listRoomGrants(grantRoomId)
-      .then((nextGrants) => {
-        if (!cancelled) setGrants(nextGrants);
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return;
-        setGrantsFailed(true);
-        showError(error);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [grantRoomId, grantVersion, showError]);
-
-  const roomById = useMemo(() => new Map(rooms.map((room) => [room.id, room])), [rooms]);
-  const principalById = useMemo(
-    () => new Map(principals.map((principal) => [principal.id, principal])),
-    [principals],
-  );
   const selectedIntegration = useMemo(
     () => integrations?.find((integration) => integration.id === integrationId) ?? null,
     [integrationId, integrations],
   );
+  const filteredIntegrations = useMemo(() => {
+    const query = integrationFilter.trim().toLocaleLowerCase();
+    if (!integrations || query === '') return integrations ?? [];
+    return integrations.filter(
+      (integration) =>
+        integration.id.toLocaleLowerCase().includes(query) ||
+        integration.name.toLocaleLowerCase().includes(query),
+    );
+  }, [integrationFilter, integrations]);
 
   useEffect(() => {
     setIntegrationName(selectedIntegration?.name ?? '');
     setRevealedToken((current) => (current?.id === integrationId ? current : null));
   }, [integrationId, selectedIntegration]);
-  const roomOptions = rooms.map((room) => ({
-    value: room.id,
-    label: t('admin.integration.nameWithId', { name: room.name, id: room.id }),
-  }));
-  const principalOptions = principals.map((principal) => ({
-    value: principal.id,
-    label: t('admin.integration.principalOption', {
-      name: principal.name,
-      id: principal.id,
-      state: principal.active ? '' : t('admin.integration.inactiveSuffix'),
-    }),
-  }));
 
-  const runMutation = async (action: BusyAction, mutate: () => Promise<unknown>, success: string) => {
-    if (busy !== null) return;
+  const runMutation = async (
+    action: BusyAction,
+    mutate: () => Promise<unknown>,
+    successMessage: string,
+  ): Promise<boolean> => {
+    if (busy !== null) return false;
     setBusy(action);
     try {
       await mutate();
-      show(success);
+      show(successMessage);
+      return true;
     } catch (error: unknown) {
       showError(error);
-      throw error;
+      return false;
     } finally {
       setBusy(null);
     }
@@ -227,163 +157,114 @@ export default function IntegrationAdmin() {
     const id = newIntegrationId.trim();
     const name = newIntegrationName.trim();
     if (!id || !name) return;
-    try {
-      let result: IntegrationCredentialResult | undefined;
-      await runMutation(
-        'integration-create',
-        async () => {
-          result = await api.createIntegration(id, name);
-        },
-        t('admin.integration.created'),
-      );
-      if (!result) return;
-      setNewIntegrationId('');
-      setNewIntegrationName('');
-      await loadCatalog();
-      setIntegrationId(result.integration.id);
-      setRevealedToken({ id: result.integration.id, token: result.token });
-    } catch {
-      // Keep the form intact for correction.
-    }
+
+    let result: IntegrationCredentialResult | undefined;
+    const created = await runMutation(
+      'integration-create',
+      async () => {
+        result = await api.createIntegration(id, name);
+      },
+      t('admin.integration.created'),
+    );
+    if (!created || !result) return;
+
+    setCreateOpen(false);
+    setNewIntegrationId('');
+    setNewIntegrationName('');
+    await loadCatalog();
+    setIntegrationId(result.integration.id);
+    setRevealedToken({ id: result.integration.id, token: result.token });
   };
 
   const renameIntegration = async () => {
     const name = integrationName.trim();
     if (!selectedIntegration || !name || name === selectedIntegration.name) return;
-    try {
-      await runMutation(
-        'integration-rename',
-        () => api.updateIntegration(selectedIntegration.id, { name }),
-        t('admin.integration.renamed'),
-      );
-      await loadCatalog();
-      setIntegrationId(selectedIntegration.id);
-    } catch {
-      // Keep the edited name for correction.
-    }
+    const renamed = await runMutation(
+      'integration-rename',
+      () => api.updateIntegration(selectedIntegration.id, { name }),
+      t('admin.integration.renamed'),
+    );
+    if (renamed) await loadCatalog();
   };
 
   const toggleIntegration = async () => {
     if (!selectedIntegration) return;
-    try {
-      await runMutation(
-        'integration-toggle',
-        () => api.updateIntegration(selectedIntegration.id, { active: !selectedIntegration.active }),
-        selectedIntegration.active
-          ? t('admin.integration.disabled')
-          : t('admin.integration.enabled'),
-      );
-      await loadCatalog();
-      setIntegrationId(selectedIntegration.id);
-    } catch {
-      // Keep the current server state.
-    }
+    const toggled = await runMutation(
+      'integration-toggle',
+      () => api.updateIntegration(selectedIntegration.id, { active: !selectedIntegration.active }),
+      selectedIntegration.active ? t('admin.integration.disabled') : t('admin.integration.enabled'),
+    );
+    if (toggled) await loadCatalog();
   };
 
   const rotateIntegrationToken = async () => {
     if (!selectedIntegration) return;
-    try {
-      let result: IntegrationCredentialResult | undefined;
-      await runMutation(
-        'integration-rotate',
-        async () => {
-          result = await api.rotateIntegrationToken(selectedIntegration.id);
-        },
-        t('admin.integration.rotated'),
-      );
-      if (result) setRevealedToken({ id: result.integration.id, token: result.token });
-      await loadCatalog();
-      setIntegrationId(selectedIntegration.id);
-    } catch {
-      // Existing token remains usable when rotation fails.
-    }
+    let result: IntegrationCredentialResult | undefined;
+    const rotated = await runMutation(
+      'integration-rotate',
+      async () => {
+        result = await api.rotateIntegrationToken(selectedIntegration.id);
+      },
+      t('admin.integration.rotated'),
+    );
+    if (!rotated || !result) return;
+    setRevealedToken({ id: result.integration.id, token: result.token });
+    await loadCatalog();
   };
 
   const deleteIntegration = async () => {
-    if (
-      !selectedIntegration ||
-      !window.confirm(t('admin.integration.deleteConfirm', { name: selectedIntegration.name }))
-    ) {
-      return;
-    }
-    try {
-      await runMutation(
-        'integration-delete',
-        () => api.deleteIntegration(selectedIntegration.id),
-        t('admin.integration.deleted'),
-      );
-      setRevealedToken(null);
-      setIntegrationId('');
-      await loadCatalog();
-    } catch {
-      // Keep the selected Integration visible when deletion fails.
-    }
+    if (!selectedIntegration) return;
+    const deleted = await runMutation(
+      'integration-delete',
+      () => api.deleteIntegration(selectedIntegration.id),
+      t('admin.integration.deleted'),
+    );
+    if (!deleted) return;
+    setRevealedToken(null);
+    setIntegrationId('');
+    await loadCatalog();
   };
 
-  const saveScope = async () => {
-    const binding: IntegrationScopeBinding = {
-      adapter_id: scopeAdapterId.trim(),
-      scope_type: scopeType.trim(),
-      scope_id: scopeId.trim(),
-      room_id: scopeRoomId,
-    };
-    if (!integrationId || Object.values(binding).some((value) => !value)) return;
-    try {
-      await runMutation(
-        'scope-save',
-        () => api.bindIntegrationScope(integrationId, binding),
-        t('admin.integration.scopeSaved'),
-      );
-      setScopeId('');
-      setIntegrationVersion((value) => value + 1);
-    } catch {
-      // Error toast is emitted by runMutation; keep the form intact for correction.
-    }
+  const saveScope = async (binding: IntegrationScopeBinding): Promise<boolean> => {
+    if (!selectedIntegration) return false;
+    const saved = await runMutation(
+      'scope-save',
+      () => api.bindIntegrationScope(selectedIntegration.id, binding),
+      t('admin.integration.scopeSaved'),
+    );
+    if (saved) setIntegrationVersion((version) => version + 1);
+    return saved;
   };
 
   const deleteScope = async (scope: IntegrationScopeBindingInfo) => {
+    if (!selectedIntegration) return;
     const binding: IntegrationScopeBinding = {
       adapter_id: scope.adapter_id,
       scope_type: scope.scope_type,
       scope_id: scope.scope_id,
       room_id: scope.room_id,
     };
-    const action = `scope-delete:${scopeKey(scope)}` as const;
-    try {
-      await runMutation(
-        action,
-        () => api.unbindIntegrationScope(integrationId, binding),
-        t('admin.integration.scopeRemoved'),
-      );
-      setIntegrationVersion((value) => value + 1);
-    } catch {
-      // Keep the row so the action can be retried.
-    }
+    const deleted = await runMutation(
+      `scope-delete:${scopeKey(scope)}`,
+      () => api.unbindIntegrationScope(selectedIntegration.id, binding),
+      t('admin.integration.scopeRemoved'),
+    );
+    if (deleted) setIntegrationVersion((version) => version + 1);
   };
 
-  const saveSubject = async () => {
-    const link: IntegrationSubjectLink = {
-      adapter_id: subjectAdapterId.trim(),
-      scope_type: subjectScopeType.trim(),
-      scope_id: subjectScopeId.trim(),
-      subject_id: subjectId.trim(),
-      principal_id: subjectPrincipalId,
-    };
-    if (!integrationId || Object.values(link).some((value) => !value)) return;
-    try {
-      await runMutation(
-        'subject-save',
-        () => api.linkIntegrationSubject(integrationId, link),
-        t('admin.integration.subjectSaved'),
-      );
-      setSubjectId('');
-      setIntegrationVersion((value) => value + 1);
-    } catch {
-      // Error toast is emitted by runMutation; keep the form intact for correction.
-    }
+  const saveSubject = async (link: IntegrationSubjectLink): Promise<boolean> => {
+    if (!selectedIntegration) return false;
+    const saved = await runMutation(
+      'subject-save',
+      () => api.linkIntegrationSubject(selectedIntegration.id, link),
+      t('admin.integration.subjectSaved'),
+    );
+    if (saved) setIntegrationVersion((version) => version + 1);
+    return saved;
   };
 
   const deleteSubject = async (subject: IntegrationSubjectLinkInfo) => {
+    if (!selectedIntegration) return;
     const link: IntegrationSubjectLink = {
       adapter_id: subject.adapter_id,
       scope_type: subject.scope_type,
@@ -391,46 +272,24 @@ export default function IntegrationAdmin() {
       subject_id: subject.subject_id,
       principal_id: subject.principal_id,
     };
-    const action = `subject-delete:${subjectKey(subject)}` as const;
-    try {
-      await runMutation(
-        action,
-        () => api.unlinkIntegrationSubject(integrationId, link),
-        t('admin.integration.subjectRemoved'),
-      );
-      setIntegrationVersion((value) => value + 1);
-    } catch {
-      // Keep the row so the action can be retried.
-    }
+    const deleted = await runMutation(
+      `subject-delete:${subjectKey(subject)}`,
+      () => api.unlinkIntegrationSubject(selectedIntegration.id, link),
+      t('admin.integration.subjectRemoved'),
+    );
+    if (deleted) setIntegrationVersion((version) => version + 1);
   };
 
-  const saveGrant = async () => {
-    if (!grantRoomId || !grantPrincipalId) return;
-    try {
-      await runMutation(
-        'grant-save',
-        () => api.grantRoomController(grantRoomId, grantPrincipalId),
-        t('admin.integration.grantSaved'),
-      );
-      setGrantVersion((value) => value + 1);
-    } catch {
-      // Error toast is emitted by runMutation; keep the selection intact.
-    }
-  };
-
-  const deleteGrant = async (grant: RoomControllerGrant) => {
-    const action = `grant-delete:${grant.principal_id}` as const;
-    try {
-      await runMutation(
-        action,
-        () => api.revokeRoomController(grant.room_id, grant.principal_id),
-        t('admin.integration.grantRemoved'),
-      );
-      setGrantVersion((value) => value + 1);
-    } catch {
-      // Keep the row so the action can be retried.
-    }
-  };
+  const confirmation =
+    selectedIntegration && confirmAction
+      ? {
+          title: t(`admin.integration.${confirmAction}DialogTitle`),
+          description: t(`admin.integration.${confirmAction}DialogDescription`, {
+            name: selectedIntegration.name,
+          }),
+          confirmText: t(`admin.integration.${confirmAction}DialogConfirm`),
+        }
+      : null;
 
   return (
     <section>
@@ -439,138 +298,232 @@ export default function IntegrationAdmin() {
           <h2 className="font-display text-2xl font-semibold">{t('admin.integration.heading')}</h2>
           <p className="mt-1 text-sm text-muted">{t('admin.integration.intro')}</p>
         </div>
-        <button
-          type="button"
-          onClick={() => void loadCatalog()}
-          disabled={catalogLoading}
-          className={secondaryButtonClass}
-        >
-          {catalogLoading ? t('admin.common.working') : t('admin.common.refresh')}
-        </button>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => setCreateOpen(true)} className={primaryButtonClass}>
+            {t('admin.integration.newIntegration')}
+          </button>
+          <button
+            type="button"
+            onClick={() => void loadCatalog()}
+            disabled={catalogLoading}
+            className={secondaryButtonClass}
+          >
+            {catalogLoading ? t('admin.common.working') : t('admin.common.refresh')}
+          </button>
+        </div>
       </div>
-
-      {!catalogFailed && integrations !== null ? (
-        <IntegrationLifecyclePanel
-          integrations={integrations}
-          selected={selectedIntegration}
-          selectedId={integrationId}
-          newId={newIntegrationId}
-          newName={newIntegrationName}
-          editName={integrationName}
-          revealedToken={revealedToken}
-          busy={busy}
-          onSelect={setIntegrationId}
-          onNewIdChange={setNewIntegrationId}
-          onNewNameChange={setNewIntegrationName}
-          onEditNameChange={setIntegrationName}
-          onCreate={() => void createIntegration()}
-          onRename={() => void renameIntegration()}
-          onToggle={() => void toggleIntegration()}
-          onRotate={() => void rotateIntegrationToken()}
-          onDelete={() => void deleteIntegration()}
-          onCopyToken={() => {
-            if (!revealedToken) return;
-            void navigator.clipboard
-              .writeText(revealedToken.token)
-              .then(() => show(t('admin.integration.tokenCopied')))
-              .catch(showError);
-          }}
-        />
-      ) : null}
 
       {catalogFailed ? (
         <LoadError message={t('admin.integration.catalogFailed')} onRetry={() => void loadCatalog()} />
       ) : integrations === null ? (
         <LoadingState />
       ) : integrations.length === 0 ? (
-        <EmptyState>{t('admin.integration.integrationEmpty')}</EmptyState>
+        <EmptyState>
+          <p>{t('admin.integration.integrationEmpty')}</p>
+          <button type="button" onClick={() => setCreateOpen(true)} className="mt-3 text-accent">
+            {t('admin.integration.createFirst')}
+          </button>
+        </EmptyState>
       ) : (
-        <div className="grid gap-5">
+        <div className="grid items-start gap-5 lg:grid-cols-[240px_minmax(0,1fr)]">
+          <aside className="overflow-hidden rounded-md border border-hairline bg-panel lg:sticky lg:top-4">
+            <div className="border-b border-hairline p-3">
+              <label className="block text-[11px] font-medium uppercase tracking-[0.1em] text-faint">
+                {t('admin.integration.integrationList')}
+                <input
+                  type="search"
+                  value={integrationFilter}
+                  onChange={(event) => setIntegrationFilter(event.target.value)}
+                  placeholder={t('admin.integration.integrationSearchPlaceholder')}
+                  className={inputClass}
+                />
+              </label>
+            </div>
+            <nav className="max-h-[65vh] overflow-y-auto p-1.5" aria-label={t('admin.integration.integrationList')}>
+              {filteredIntegrations.length === 0 ? (
+                <p className="px-3 py-8 text-center text-xs text-faint">
+                  {t('admin.integration.integrationSearchEmpty')}
+                </p>
+              ) : (
+                filteredIntegrations.map((integration) => (
+                  <button
+                    key={integration.id}
+                    type="button"
+                    aria-current={integration.id === integrationId ? 'true' : undefined}
+                    onClick={() => setIntegrationId(integration.id)}
+                    className={`mb-1 w-full rounded px-3 py-2.5 text-left transition-colors last:mb-0 ${
+                      integration.id === integrationId
+                        ? 'bg-panel-2 text-paper'
+                        : 'text-muted hover:bg-panel-2 hover:text-paper'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${
+                          integration.active ? 'bg-[#71B99A]' : 'bg-faint'
+                        }`}
+                      />
+                      <span className="truncate text-[13px] font-medium">{integration.name}</span>
+                    </span>
+                    <span className="mt-1 block truncate pl-3.5 font-mono text-[10px] text-faint">
+                      {integration.id}
+                    </span>
+                  </button>
+                ))
+              )}
+            </nav>
+          </aside>
 
-          {integrationDataFailed ? (
-            <LoadError
-              message={t('admin.integration.mappingFailed')}
-              onRetry={() => setIntegrationVersion((value) => value + 1)}
-            />
-          ) : scopes === null || subjects === null ? (
-            <LoadingState />
-          ) : (
-            <>
-              <ScopePanel
-                scopes={scopes}
-                rooms={rooms}
-                roomById={roomById}
-                adapterId={scopeAdapterId}
-                scopeType={scopeType}
-                scopeId={scopeId}
-                roomId={scopeRoomId}
-                roomOptions={roomOptions}
+          {selectedIntegration && (
+            <div className="min-w-0">
+
+              <IntegrationLifecycleCard
+                integration={selectedIntegration}
+                editName={integrationName}
+                revealedToken={revealedToken}
                 busy={busy}
-                onAdapterIdChange={setScopeAdapterId}
-                onScopeTypeChange={setScopeType}
-                onScopeIdChange={setScopeId}
-                onRoomIdChange={setScopeRoomId}
-                onSave={() => void saveScope()}
-                onDelete={(scope) => void deleteScope(scope)}
+                onEditNameChange={setIntegrationName}
+                onRename={() => void renameIntegration()}
+                onToggle={() => {
+                  if (selectedIntegration.active) setConfirmAction('disable');
+                  else void toggleIntegration();
+                }}
+                onRotate={() => setConfirmAction('rotate')}
+                onDelete={() => setConfirmAction('delete')}
+                onCopyToken={() => {
+                  if (!revealedToken) return;
+                  void navigator.clipboard
+                    .writeText(revealedToken.token)
+                    .then(() => show(t('admin.integration.tokenCopied')))
+                    .catch(showError);
+                }}
               />
 
-              <SubjectPanel
-                subjects={subjects}
-                principalById={principalById}
-                adapterId={subjectAdapterId}
-                scopeType={subjectScopeType}
-                scopeId={subjectScopeId}
-                subjectId={subjectId}
-                principalId={subjectPrincipalId}
-                principalOptions={principalOptions}
-                busy={busy}
-                onAdapterIdChange={setSubjectAdapterId}
-                onScopeTypeChange={setSubjectScopeType}
-                onScopeIdChange={setSubjectScopeId}
-                onSubjectIdChange={setSubjectId}
-                onPrincipalIdChange={setSubjectPrincipalId}
-                onSave={() => void saveSubject()}
-                onDelete={(subject) => void deleteSubject(subject)}
-              />
-            </>
+              <div className="mt-5 grid gap-5">
+                {integrationDataFailed ? (
+                  <LoadError
+                    message={t('admin.integration.mappingFailed')}
+                    onRetry={() => setIntegrationVersion((version) => version + 1)}
+                  />
+                ) : scopes === null || subjects === null ? (
+                  <LoadingState />
+                ) : (
+                  <>
+                    <IntegrationScopePanel
+                      scopes={scopes}
+                      rooms={rooms}
+                      busy={busy}
+                      onSave={saveScope}
+                      onDelete={(scope) => void deleteScope(scope)}
+                    />
+                    <IntegrationSubjectPanel
+                      integrationId={selectedIntegration.id}
+                      subjects={subjects}
+                      scopes={scopes}
+                      busy={busy}
+                      onSave={saveSubject}
+                      onDelete={(subject) => void deleteSubject(subject)}
+                    />
+                  </>
+                )}
+              </div>
+            </div>
           )}
-
-          <GrantPanel
-            rooms={rooms}
-            roomId={grantRoomId}
-            roomOptions={roomOptions}
-            grants={grants}
-            failed={grantsFailed}
-            principalById={principalById}
-            principalId={grantPrincipalId}
-            principalOptions={principalOptions}
-            busy={busy}
-            onRoomIdChange={setGrantRoomId}
-            onPrincipalIdChange={setGrantPrincipalId}
-            onSave={() => void saveGrant()}
-            onDelete={(grant) => void deleteGrant(grant)}
-            onRetry={() => setGrantVersion((value) => value + 1)}
-          />
         </div>
+      )}
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen} title={t('admin.integration.createDialogTitle')}>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void createIntegration();
+          }}
+        >
+          <label className="block text-xs text-muted">
+            {t('admin.integration.integrationId')}
+            <input
+              required
+              value={newIntegrationId}
+              onChange={(event) => setNewIntegrationId(event.target.value)}
+              placeholder={t('admin.integration.integrationIdPlaceholder')}
+              className={inputClass}
+            />
+          </label>
+          <label className="mt-4 block text-xs text-muted">
+            {t('admin.integration.integrationName')}
+            <input
+              required
+              value={newIntegrationName}
+              onChange={(event) => setNewIntegrationName(event.target.value)}
+              placeholder={t('admin.integration.integrationNamePlaceholder')}
+              className={inputClass}
+            />
+          </label>
+          <div className="mt-6 flex justify-end gap-3">
+            <button
+              type="button"
+              disabled={busy === 'integration-create'}
+              onClick={() => setCreateOpen(false)}
+              className={secondaryButtonClass}
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              type="submit"
+              disabled={
+                busy === 'integration-create' ||
+                !newIntegrationId.trim() ||
+                !newIntegrationName.trim()
+              }
+              className={primaryButtonClass}
+            >
+              {busy === 'integration-create' ? t('admin.common.working') : t('admin.integration.create')}
+            </button>
+          </div>
+        </form>
+      </Dialog>
+
+      {confirmation && (
+        <ConfirmDialog
+          open={confirmAction !== null}
+          onOpenChange={(open) => {
+            if (!open) setConfirmAction(null);
+          }}
+          title={confirmation.title}
+          description={confirmation.description}
+          confirmText={confirmation.confirmText}
+          cancelText={t('common.cancel')}
+          danger
+          onConfirm={() => {
+            const action = confirmAction;
+            setConfirmAction(null);
+            if (action === 'disable') void toggleIntegration();
+            if (action === 'rotate') void rotateIntegrationToken();
+            if (action === 'delete') void deleteIntegration();
+          }}
+        />
       )}
     </section>
   );
 }
 
-function IntegrationLifecyclePanel(props: {
-  integrations: IntegrationInfo[];
-  selected: IntegrationInfo | null;
-  selectedId: string;
-  newId: string;
-  newName: string;
+function IntegrationLifecycleCard({
+  integration,
+  editName,
+  revealedToken,
+  busy,
+  onEditNameChange,
+  onRename,
+  onToggle,
+  onRotate,
+  onDelete,
+  onCopyToken,
+}: {
+  integration: IntegrationInfo;
   editName: string;
   revealedToken: { id: string; token: string } | null;
   busy: BusyAction | null;
-  onSelect: (value: string) => void;
-  onNewIdChange: (value: string) => void;
-  onNewNameChange: (value: string) => void;
   onEditNameChange: (value: string) => void;
-  onCreate: () => void;
   onRename: () => void;
   onToggle: () => void;
   onRotate: () => void;
@@ -578,145 +531,54 @@ function IntegrationLifecyclePanel(props: {
   onCopyToken: () => void;
 }) {
   const { t } = useTranslation();
-  const {
-    integrations,
-    selected,
-    selectedId,
-    newId,
-    newName,
-    editName,
-    revealedToken,
-    busy,
-    onSelect,
-    onNewIdChange,
-    onNewNameChange,
-    onEditNameChange,
-    onCreate,
-    onRename,
-    onToggle,
-    onRotate,
-    onDelete,
-    onCopyToken,
-  } = props;
   const working = busy !== null;
 
   return (
-    <section className="mb-5 rounded-md border border-hairline bg-panel px-4 py-4">
-      <div>
-        <h3 className="text-sm font-semibold">{t('admin.integration.lifecycleHeading')}</h3>
-        <p className="mt-1 text-xs text-muted">{t('admin.integration.lifecycleIntro')}</p>
+    <section className="rounded-md border border-hairline bg-panel p-5">
+      <div className="mb-4">
+        <h3 className="font-display text-xl font-semibold">{t('admin.integration.lifecycleHeading')}</h3>
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
-        <Field label={t('admin.integration.integrationId')}>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          onRename();
+        }}
+        className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end"
+      >
+        <label className="block text-xs text-muted">
+          {t('admin.integration.integrationName')}
           <input
-            value={newId}
-            onChange={(event) => onNewIdChange(event.target.value)}
-            placeholder={t('admin.integration.integrationIdPlaceholder')}
+            required
+            value={editName}
+            onChange={(event) => onEditNameChange(event.target.value)}
             className={inputClass}
           />
-        </Field>
-        <Field label={t('admin.integration.integrationName')}>
-          <input
-            value={newName}
-            onChange={(event) => onNewNameChange(event.target.value)}
-            placeholder={t('admin.integration.integrationNamePlaceholder')}
-            className={inputClass}
-          />
-        </Field>
+        </label>
         <button
-          type="button"
-          onClick={onCreate}
-          disabled={working || !newId.trim() || !newName.trim()}
-          className={primaryButtonClass}
+          type="submit"
+          disabled={working || !editName.trim() || editName.trim() === integration.name}
+          className={secondaryButtonClass}
         >
-          {busy === 'integration-create'
+          {busy === 'integration-rename' ? t('admin.common.working') : t('admin.integration.rename')}
+        </button>
+      </form>
+
+      <div className="mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-hairline pt-4">
+        <button type="button" onClick={onToggle} disabled={working} className={secondaryButtonClass}>
+          {busy === 'integration-toggle'
             ? t('admin.common.working')
-            : t('admin.integration.create')}
+            : integration.active
+              ? t('admin.integration.disable')
+              : t('admin.integration.enable')}
+        </button>
+        <button type="button" onClick={onRotate} disabled={working} className={secondaryButtonClass}>
+          {busy === 'integration-rotate' ? t('admin.common.working') : t('admin.integration.rotateToken')}
+        </button>
+        <button type="button" onClick={onDelete} disabled={working} className={dangerButtonClass}>
+          {busy === 'integration-delete' ? t('admin.common.working') : t('admin.integration.delete')}
         </button>
       </div>
-
-      {selected ? (
-        <div className="mt-5 border-t border-hairline pt-4">
-          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
-            <Field label={t('admin.integration.integration')}>
-              <Select
-                value={selectedId}
-                onValueChange={onSelect}
-                options={integrations.map((integration) => ({
-                  value: integration.id,
-                  label: `${integration.name} · ${integration.id}`,
-                }))}
-                className="mt-1.5 w-full"
-              />
-            </Field>
-            <Field label={t('admin.integration.integrationName')}>
-              <input
-                value={editName}
-                onChange={(event) => onEditNameChange(event.target.value)}
-                className={inputClass}
-              />
-            </Field>
-            <button
-              type="button"
-              onClick={onRename}
-              disabled={working || !editName.trim() || editName.trim() === selected.name}
-              className={secondaryButtonClass}
-            >
-              {busy === 'integration-rename'
-                ? t('admin.common.working')
-                : t('admin.integration.rename')}
-            </button>
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <span
-              className={`rounded-full px-2.5 py-1 text-xs ${
-                selected.active
-                  ? 'bg-[#3F8B6D]/15 text-[#71B99A]'
-                  : 'bg-hairline text-muted'
-              }`}
-            >
-              {selected.active
-                ? t('admin.integration.statusActive')
-                : t('admin.integration.statusDisabled')}
-            </span>
-            <span className="mr-auto font-mono text-[11px] text-faint">{selected.id}</span>
-            <button
-              type="button"
-              onClick={onToggle}
-              disabled={working}
-              className={secondaryButtonClass}
-            >
-              {busy === 'integration-toggle'
-                ? t('admin.common.working')
-                : selected.active
-                  ? t('admin.integration.disable')
-                  : t('admin.integration.enable')}
-            </button>
-            <button
-              type="button"
-              onClick={onRotate}
-              disabled={working}
-              className={secondaryButtonClass}
-            >
-              {busy === 'integration-rotate'
-                ? t('admin.common.working')
-                : t('admin.integration.rotateToken')}
-            </button>
-            <button
-              type="button"
-              onClick={onDelete}
-              disabled={working}
-              className={removeButtonClass}
-            >
-              {busy === 'integration-delete'
-                ? t('admin.common.working')
-                : t('admin.integration.delete')}
-            </button>
-          </div>
-        </div>
-      ) : null}
 
       {revealedToken ? (
         <div className="mt-4 rounded-md border border-[#D7A94A]/40 bg-[#D7A94A]/8 p-3">
@@ -740,461 +602,25 @@ function IntegrationLifecyclePanel(props: {
   );
 }
 
-function ScopePanel(props: {
-  scopes: IntegrationScopeBindingInfo[];
-  rooms: RoomInfo[];
-  roomById: Map<string, RoomInfo>;
-  adapterId: string;
-  scopeType: string;
-  scopeId: string;
-  roomId: string;
-  roomOptions: Array<{ value: string; label: string }>;
-  busy: BusyAction | null;
-  onAdapterIdChange: (value: string) => void;
-  onScopeTypeChange: (value: string) => void;
-  onScopeIdChange: (value: string) => void;
-  onRoomIdChange: (value: string) => void;
-  onSave: () => void;
-  onDelete: (scope: IntegrationScopeBindingInfo) => void;
-}) {
+function LoadingState() {
   const { t } = useTranslation();
-  const canSave =
-    props.adapterId.trim() !== '' &&
-    props.scopeType.trim() !== '' &&
-    props.scopeId.trim() !== '' &&
-    props.roomId !== '';
-
-  return (
-    <ManagementPanel title={t('admin.integration.scopeTitle')} intro={t('admin.integration.scopeIntro')}>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          props.onSave();
-        }}
-        className="grid gap-3 border-b border-hairline px-4 py-4 lg:grid-cols-[1fr_1fr_1fr_1.35fr_auto] lg:items-end"
-      >
-        <TextField
-          label={t('admin.integration.adapterId')}
-          value={props.adapterId}
-          onChange={props.onAdapterIdChange}
-          placeholder={t('admin.integration.adapterPlaceholder')}
-        />
-        <TextField
-          label={t('admin.integration.scopeType')}
-          value={props.scopeType}
-          onChange={props.onScopeTypeChange}
-          placeholder={t('admin.integration.scopeTypePlaceholder')}
-        />
-        <TextField
-          label={t('admin.integration.scopeId')}
-          value={props.scopeId}
-          onChange={props.onScopeIdChange}
-          placeholder={t('admin.integration.scopeIdPlaceholder')}
-        />
-        <div>
-          <span className="block text-xs text-muted">{t('admin.integration.room')}</span>
-          {props.rooms.length > 0 ? (
-            <Select
-              value={props.roomId}
-              onValueChange={props.onRoomIdChange}
-              options={props.roomOptions}
-              className="mt-1.5 w-full"
-            />
-          ) : (
-            <p className="mt-1.5 rounded-md border border-dashed border-hairline px-3 py-2 text-xs text-faint">
-              {t('admin.integration.roomsEmpty')}
-            </p>
-          )}
-        </div>
-        <button
-          type="submit"
-          disabled={!canSave || props.busy !== null}
-          className={primaryButtonClass}
-        >
-          {props.busy === 'scope-save'
-            ? t('admin.integration.saving')
-            : t('admin.integration.bindScope')}
-        </button>
-      </form>
-
-      {props.scopes.length === 0 ? (
-        <InlineEmpty>{t('admin.integration.scopeEmpty')}</InlineEmpty>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] border-collapse text-left text-[13px]">
-            <thead className="bg-panel-2 text-[11px] uppercase tracking-[0.08em] text-faint">
-              <tr>
-                <th className="px-4 py-2 font-medium">{t('admin.integration.adapter')}</th>
-                <th className="px-4 py-2 font-medium">{t('admin.integration.externalScope')}</th>
-                <th className="px-4 py-2 font-medium">{t('admin.integration.defaultRoom')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('admin.integration.action')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {props.scopes.map((scope) => {
-                const room = props.roomById.get(scope.room_id);
-                const action = `scope-delete:${scopeKey(scope)}` as const;
-                return (
-                  <tr key={scopeKey(scope)} className="border-t border-hairline">
-                    <td className="px-4 py-3 font-mono text-xs text-muted">{scope.adapter_id}</td>
-                    <td className="px-4 py-3">
-                      <div>{scope.scope_type}</div>
-                      <div className="font-mono text-[11px] text-faint">{scope.scope_id}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div>{room?.name ?? t('admin.integration.unknownRoom')}</div>
-                      <div className="font-mono text-[11px] text-faint">{scope.room_id}</div>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        disabled={props.busy !== null}
-                        onClick={() => props.onDelete(scope)}
-                        className={removeButtonClass}
-                      >
-                        {props.busy === action
-                          ? t('admin.integration.removing')
-                          : t('admin.integration.unbind')}
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </ManagementPanel>
-  );
+  return <p className="py-10 text-center text-sm text-faint">{t('common.loading')}</p>;
 }
 
-function SubjectPanel(props: {
-  subjects: IntegrationSubjectLinkInfo[];
-  principalById: Map<string, PrincipalInfo>;
-  adapterId: string;
-  scopeType: string;
-  scopeId: string;
-  subjectId: string;
-  principalId: string;
-  principalOptions: Array<{ value: string; label: string }>;
-  busy: BusyAction | null;
-  onAdapterIdChange: (value: string) => void;
-  onScopeTypeChange: (value: string) => void;
-  onScopeIdChange: (value: string) => void;
-  onSubjectIdChange: (value: string) => void;
-  onPrincipalIdChange: (value: string) => void;
-  onSave: () => void;
-  onDelete: (subject: IntegrationSubjectLinkInfo) => void;
-}) {
-  const { t } = useTranslation();
-  const canSave =
-    props.adapterId.trim() !== '' &&
-    props.scopeType.trim() !== '' &&
-    props.scopeId.trim() !== '' &&
-    props.subjectId.trim() !== '' &&
-    props.principalId !== '';
-
+function EmptyState({ children }: { children: React.ReactNode }) {
   return (
-    <ManagementPanel title={t('admin.integration.subjectTitle')} intro={t('admin.integration.subjectIntro')}>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          props.onSave();
-        }}
-        className="grid gap-3 border-b border-hairline px-4 py-4 lg:grid-cols-[1fr_1fr_1fr_1fr_1.45fr_auto] lg:items-end"
-      >
-        <TextField
-          label={t('admin.integration.adapterId')}
-          value={props.adapterId}
-          onChange={props.onAdapterIdChange}
-          placeholder={t('admin.integration.adapterPlaceholder')}
-        />
-        <TextField
-          label={t('admin.integration.scopeType')}
-          value={props.scopeType}
-          onChange={props.onScopeTypeChange}
-          placeholder={t('admin.integration.scopeTypePlaceholder')}
-        />
-        <TextField
-          label={t('admin.integration.scopeId')}
-          value={props.scopeId}
-          onChange={props.onScopeIdChange}
-          placeholder={t('admin.integration.scopeIdPlaceholder')}
-        />
-        <TextField
-          label={t('admin.integration.subjectId')}
-          value={props.subjectId}
-          onChange={props.onSubjectIdChange}
-          placeholder={t('admin.integration.subjectIdPlaceholder')}
-        />
-        <div>
-          <span className="block text-xs text-muted">{t('admin.integration.principal')}</span>
-          {props.principalOptions.length > 0 ? (
-            <Select
-              value={props.principalId}
-              onValueChange={props.onPrincipalIdChange}
-              options={props.principalOptions}
-              className="mt-1.5 w-full"
-            />
-          ) : (
-            <p className="mt-1.5 rounded-md border border-dashed border-hairline px-3 py-2 text-xs text-faint">
-              {t('admin.integration.principalsEmpty')}
-            </p>
-          )}
-        </div>
-        <button
-          type="submit"
-          disabled={!canSave || props.busy !== null}
-          className={primaryButtonClass}
-        >
-          {props.busy === 'subject-save'
-            ? t('admin.integration.saving')
-            : t('admin.integration.linkSubject')}
-        </button>
-      </form>
-
-      {props.subjects.length === 0 ? (
-        <InlineEmpty>{t('admin.integration.subjectEmpty')}</InlineEmpty>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[820px] border-collapse text-left text-[13px]">
-            <thead className="bg-panel-2 text-[11px] uppercase tracking-[0.08em] text-faint">
-              <tr>
-                <th className="px-4 py-2 font-medium">{t('admin.integration.adapter')}</th>
-                <th className="px-4 py-2 font-medium">{t('admin.integration.externalScope')}</th>
-                <th className="px-4 py-2 font-medium">{t('admin.integration.externalSubject')}</th>
-                <th className="px-4 py-2 font-medium">{t('admin.integration.principal')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('admin.integration.action')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {props.subjects.map((subject) => {
-                const principal = props.principalById.get(subject.principal_id);
-                const action = `subject-delete:${subjectKey(subject)}` as const;
-                return (
-                  <tr key={subjectKey(subject)} className="border-t border-hairline">
-                    <td className="px-4 py-3 font-mono text-xs text-muted">{subject.adapter_id}</td>
-                    <td className="px-4 py-3">
-                      <div>{subject.scope_type}</div>
-                      <div className="font-mono text-[11px] text-faint">{subject.scope_id}</div>
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-muted">{subject.subject_id}</td>
-                    <td className="px-4 py-3">
-                      <div>{principal?.name ?? t('admin.integration.unknownPrincipal')}</div>
-                      <div className="font-mono text-[11px] text-faint">{subject.principal_id}</div>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        disabled={props.busy !== null}
-                        onClick={() => props.onDelete(subject)}
-                        className={removeButtonClass}
-                      >
-                        {props.busy === action
-                          ? t('admin.integration.removing')
-                          : t('admin.integration.unlink')}
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </ManagementPanel>
-  );
-}
-
-function GrantPanel(props: {
-  rooms: RoomInfo[];
-  roomId: string;
-  roomOptions: Array<{ value: string; label: string }>;
-  grants: RoomControllerGrant[] | null;
-  failed: boolean;
-  principalById: Map<string, PrincipalInfo>;
-  principalId: string;
-  principalOptions: Array<{ value: string; label: string }>;
-  busy: BusyAction | null;
-  onRoomIdChange: (value: string) => void;
-  onPrincipalIdChange: (value: string) => void;
-  onSave: () => void;
-  onDelete: (grant: RoomControllerGrant) => void;
-  onRetry: () => void;
-}) {
-  const { t } = useTranslation();
-
-  return (
-    <ManagementPanel title={t('admin.integration.grantTitle')} intro={t('admin.integration.grantIntro')}>
-      {props.rooms.length === 0 ? (
-        <InlineEmpty>{t('admin.integration.roomsEmpty')}</InlineEmpty>
-      ) : (
-        <>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              props.onSave();
-            }}
-            className="grid gap-3 border-b border-hairline px-4 py-4 md:grid-cols-[1fr_1.25fr_auto] md:items-end"
-          >
-            <div>
-              <span className="block text-xs text-muted">{t('admin.integration.room')}</span>
-              <Select
-                value={props.roomId}
-                onValueChange={props.onRoomIdChange}
-                options={props.roomOptions}
-                className="mt-1.5 w-full"
-              />
-            </div>
-            <div>
-              <span className="block text-xs text-muted">{t('admin.integration.principal')}</span>
-              {props.principalOptions.length > 0 ? (
-                <Select
-                  value={props.principalId}
-                  onValueChange={props.onPrincipalIdChange}
-                  options={props.principalOptions}
-                  className="mt-1.5 w-full"
-                />
-              ) : (
-                <p className="mt-1.5 rounded-md border border-dashed border-hairline px-3 py-2 text-xs text-faint">
-                  {t('admin.integration.principalsEmpty')}
-                </p>
-              )}
-            </div>
-            <button
-              type="submit"
-              disabled={!props.roomId || !props.principalId || props.busy !== null}
-              className={primaryButtonClass}
-            >
-              {props.busy === 'grant-save'
-                ? t('admin.integration.saving')
-                : t('admin.integration.grantController')}
-            </button>
-          </form>
-
-          {props.failed ? (
-            <div className="p-4">
-              <LoadError message={t('admin.integration.grantsFailed')} onRetry={props.onRetry} compact />
-            </div>
-          ) : props.grants === null ? (
-            <LoadingState compact />
-          ) : props.grants.length === 0 ? (
-            <InlineEmpty>{t('admin.integration.grantEmpty')}</InlineEmpty>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[560px] border-collapse text-left text-[13px]">
-                <thead className="bg-panel-2 text-[11px] uppercase tracking-[0.08em] text-faint">
-                  <tr>
-                    <th className="px-4 py-2 font-medium">{t('admin.integration.principal')}</th>
-                    <th className="px-4 py-2 font-medium">{t('admin.integration.capability')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('admin.integration.action')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {props.grants.map((grant) => {
-                    const principal = props.principalById.get(grant.principal_id);
-                    const action = `grant-delete:${grant.principal_id}` as const;
-                    return (
-                      <tr key={`${grant.room_id}:${grant.principal_id}`} className="border-t border-hairline">
-                        <td className="px-4 py-3">
-                          <div>{principal?.name ?? t('admin.integration.unknownPrincipal')}</div>
-                          <div className="font-mono text-[11px] text-faint">{grant.principal_id}</div>
-                        </td>
-                        <td className="px-4 py-3 font-mono text-xs text-accent">
-                          {t('admin.integration.controller')}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <button
-                            type="button"
-                            disabled={props.busy !== null}
-                            onClick={() => props.onDelete(grant)}
-                            className={removeButtonClass}
-                          >
-                            {props.busy === action
-                              ? t('admin.integration.removing')
-                              : t('admin.integration.revoke')}
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
-      )}
-    </ManagementPanel>
-  );
-}
-
-function ManagementPanel(props: { title: string; intro: string; children: ReactNode }) {
-  return (
-    <section className="overflow-hidden rounded-md border border-hairline bg-panel">
-      <header className="border-b border-hairline px-4 py-3.5">
-        <h3 className="font-display text-lg font-semibold">{props.title}</h3>
-        <p className="mt-0.5 text-xs text-muted">{props.intro}</p>
-      </header>
-      {props.children}
-    </section>
-  );
-}
-
-function Field(props: { label: string; children: ReactNode }) {
-  return (
-    <label className="block text-xs text-muted">
-      {props.label}
-      {props.children}
-    </label>
-  );
-}
-
-function TextField(props: {
-  label: string;
-  value: string;
-  placeholder: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label className="block text-xs text-muted">
-      {props.label}
-      <input
-        required
-        value={props.value}
-        onChange={(event) => props.onChange(event.target.value)}
-        placeholder={props.placeholder}
-        className={inputClass}
-      />
-    </label>
-  );
-}
-
-function LoadingState({ compact = false }: { compact?: boolean }) {
-  const { t } = useTranslation();
-  return <p className={compact ? 'py-7 text-center text-sm text-faint' : 'py-10 text-center text-sm text-faint'}>{t('common.loading')}</p>;
-}
-
-function EmptyState({ children }: { children: ReactNode }) {
-  return (
-    <p className="rounded-md border border-dashed border-hairline bg-panel px-4 py-10 text-center text-sm text-faint">
+    <div className="rounded-md border border-dashed border-hairline bg-panel px-4 py-10 text-center text-sm text-faint">
       {children}
-    </p>
+    </div>
   );
 }
 
-function InlineEmpty({ children }: { children: ReactNode }) {
-  return <p className="px-4 py-8 text-center text-sm text-faint">{children}</p>;
-}
-
-function LoadError(props: { message: string; onRetry: () => void; compact?: boolean }) {
+function LoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
   const { t } = useTranslation();
   return (
-    <div
-      className={`${props.compact ? '' : 'rounded-md border border-dashed border-hairline bg-panel'} px-4 py-8 text-center text-sm text-muted`}
-      role="alert"
-    >
-      <p>{props.message}</p>
-      <button type="button" onClick={props.onRetry} className="mt-2 text-accent hover:underline">
+    <div className="rounded-md border border-dashed border-hairline bg-panel px-4 py-8 text-center text-sm text-muted" role="alert">
+      <p>{message}</p>
+      <button type="button" onClick={onRetry} className="mt-2 text-accent hover:underline">
         {t('common.retry')}
       </button>
     </div>

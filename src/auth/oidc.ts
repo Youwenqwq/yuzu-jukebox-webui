@@ -71,6 +71,8 @@ export function createOidcFlow(opts: OidcFlowOptions = {}): OidcFlow {
     discoveryCache.set(normalizedIssuer, completeDocument);
     return completeDocument;
   };
+  let callbackTask: Promise<{ idToken: string; accessToken?: string } | null> | null = null;
+
 
   return {
     async begin(cfg, beginOpts = {}) {
@@ -102,60 +104,72 @@ export function createOidcFlow(opts: OidcFlowOptions = {}): OidcFlow {
       redirect(authorizationUrl.href);
     },
 
-    async handleCallback(url) {
+    handleCallback(url) {
       const fallbackUrl = globalThis.location?.href ?? 'http://localhost/';
       const callbackUrl = new URL(url ?? fallbackUrl, fallbackUrl);
       const code = callbackUrl.searchParams.get('code');
       const returnedState = callbackUrl.searchParams.get('state');
       const providerError = callbackUrl.searchParams.get('error');
       if (code === null && returnedState === null && providerError === null) {
-        return null;
+        return Promise.resolve(null);
       }
 
-      const expectedState = storage.getItem(STATE_KEY);
-      if (expectedState === null || returnedState !== expectedState) {
-        throw new YuzuError('bad_request', 'OIDC callback state does not match');
+      if (callbackTask === null) {
+        callbackTask = (async () => {
+          const expectedState = storage.getItem(STATE_KEY);
+          if (expectedState === null || returnedState !== expectedState) {
+            throw new YuzuError('bad_request', 'OIDC callback state does not match');
+          }
+
+          const verifier = storage.getItem(VERIFIER_KEY);
+          const clientId = storage.getItem(CLIENT_ID_KEY);
+          const issuer = storage.getItem(ISSUER_KEY);
+          const redirectUri = storage.getItem(REDIRECT_URI_KEY);
+          for (const key of FLOW_KEYS) {
+            storage.removeItem(key);
+          }
+
+          if (providerError !== null) {
+            const description = callbackUrl.searchParams.get('error_description');
+            throw new YuzuError('provider_error', description ?? providerError);
+          }
+          if (
+            code === null ||
+            verifier === null ||
+            clientId === null ||
+            issuer === null ||
+            redirectUri === null
+          ) {
+            throw new YuzuError('bad_request', 'OIDC callback has no matching login flow');
+          }
+
+          const discovery = await discover(issuer);
+          const body = new URLSearchParams({
+            grant_type: 'authorization_code',
+            code,
+            redirect_uri: redirectUri,
+            client_id: clientId,
+            code_verifier: verifier,
+          });
+          const response = await fetchFn(discovery.token_endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body,
+          });
+          const token = (await response.json().catch(() => ({}))) as TokenResponse;
+          if (!response.ok || typeof token.id_token !== 'string') {
+            throw new YuzuError(
+              'provider_error',
+              token.error_description ?? token.error ?? `OIDC token exchange failed: HTTP ${response.status}`,
+            );
+          }
+          return token.access_token === undefined
+            ? { idToken: token.id_token }
+            : { idToken: token.id_token, accessToken: token.access_token };
+        })();
       }
 
-      const verifier = storage.getItem(VERIFIER_KEY);
-      const clientId = storage.getItem(CLIENT_ID_KEY);
-      const issuer = storage.getItem(ISSUER_KEY);
-      const redirectUri = storage.getItem(REDIRECT_URI_KEY);
-      for (const key of FLOW_KEYS) {
-        storage.removeItem(key);
-      }
-
-      if (providerError !== null) {
-        const description = callbackUrl.searchParams.get('error_description');
-        throw new YuzuError('provider_error', description ?? providerError);
-      }
-      if (code === null || verifier === null || clientId === null || issuer === null || redirectUri === null) {
-        throw new YuzuError('bad_request', 'OIDC callback has no matching login flow');
-      }
-
-      const discovery = await discover(issuer);
-      const body = new URLSearchParams({
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: redirectUri,
-        client_id: clientId,
-        code_verifier: verifier,
-      });
-      const response = await fetchFn(discovery.token_endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body,
-      });
-      const token = (await response.json().catch(() => ({}))) as TokenResponse;
-      if (!response.ok || typeof token.id_token !== 'string') {
-        throw new YuzuError(
-          'provider_error',
-          token.error_description ?? token.error ?? `OIDC token exchange failed: HTTP ${response.status}`,
-        );
-      }
-      return token.access_token === undefined
-        ? { idToken: token.id_token }
-        : { idToken: token.id_token, accessToken: token.access_token };
+      return callbackTask;
     },
   };
 }
