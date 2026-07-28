@@ -4,7 +4,8 @@ export interface LyricLine {
   translation?: string;
 }
 
-const TIMESTAMP_PATTERN = /\[(\d+):(\d{2})(?:\.(\d{1,3}))?\]/g;
+// Standard LRC uses [mm:ss.xx]; NCM and some Chinese sources use [mm:ss:xx].
+const TIMESTAMP_PATTERN = /\[(\d+):(\d{2})(?:[.:](\d{1,3}))?\]/g;
 const OFFSET_PATTERN = /^\s*\[offset\s*:\s*([+-]?\d+)\s*\]\s*$/im;
 
 interface ParsedTrackLine {

@@ -8,6 +8,39 @@ describe('parseLrc', () => {
     ]);
   });
 
+  it('accepts colon-separated fractional seconds used by NCM sources', () => {
+    expect(parseLrc('[00:19:06]どんな明日が来ても')).toEqual([
+      { timeMs: 19_060, text: 'どんな明日が来ても' },
+    ]);
+  });
+
+  it('merges translations when both tracks use colon timestamps', () => {
+    const lrc = [
+      '[00:00.00] 作词 : 40mP',
+      '[00:19:06]どんな明日が来ても笑えるように',
+      '[00:28:72]そうやって決めたのに',
+    ].join('\n');
+    const tlrc = [
+      '[by:鲨鱼字幕组]',
+      '[00:19:06]不论明天如何 都常挂笑颜 将当下活好',
+      '[00:28:72]分明是已经决定之事',
+    ].join('\n');
+
+    expect(parseLrc(lrc, tlrc)).toEqual([
+      { timeMs: 0, text: '作词 : 40mP' },
+      {
+        timeMs: 19_060,
+        text: 'どんな明日が来ても笑えるように',
+        translation: '不论明天如何 都常挂笑颜 将当下活好',
+      },
+      {
+        timeMs: 28_720,
+        text: 'そうやって決めたのに',
+        translation: '分明是已经决定之事',
+      },
+    ]);
+  });
+
   it('expands multiple timestamps on one line', () => {
     expect(parseLrc('[00:01.00][00:03.50]再唱一次')).toEqual([
       { timeMs: 1_000, text: '再唱一次' },
