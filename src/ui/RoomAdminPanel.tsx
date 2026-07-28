@@ -5,6 +5,8 @@ import type { HistoryEntry, StatsEntry } from '../api/types';
 import { api, roomStore } from '../app/session';
 import type { RadioState } from '../protocol/types';
 import { formatDateTime } from './format';
+import { RoomGrantPanel } from './RoomGrantPanel';
+import { RoomOutputPanel } from './RoomOutputPanel';
 import { Select, TabPanel, Tabs } from './primitives';
 import { useToast } from './toast';
 
@@ -44,10 +46,12 @@ export function RoomAdminPanel({
   roomId,
   radio,
   canManagePolicy,
+  requesterNames,
 }: {
   roomId: string;
   radio: RadioState | null;
   canManagePolicy: boolean;
+  requesterNames: ReadonlyMap<string, string>;
 }) {
   const { t } = useTranslation();
   const { show, showError } = useToast();
@@ -56,6 +60,7 @@ export function RoomAdminPanel({
   const [loading, setLoading] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[] | null>(null);
+  const [principalNames, setPrincipalNames] = useState<Map<string, string>>(() => new Map());
   const [stats, setStats] = useState<StatsEntry[] | null>(null);
   const [historyHasMore, setHistoryHasMore] = useState(false);
   const [historyBusy, setHistoryBusy] = useState(false);
@@ -69,6 +74,7 @@ export function RoomAdminPanel({
 
   const [maxQueue, setMaxQueue] = useState('0');
   const [queueLimits, setQueueLimits] = useState<QueueLimitRow[]>([]);
+  const [memberPlayerVolume, setMemberPlayerVolume] = useState(false);
   const [policySaving, setPolicySaving] = useState(false);
 
   const infiniteSource = INFINITE_SOURCE_RE.test(radioSource.trim());
@@ -94,9 +100,15 @@ export function RoomAdminPanel({
     setLoadFailed(false);
     setHistory(null);
     setStats(null);
+    setPrincipalNames(new Map());
 
-    Promise.all([api.listRooms(), api.roomHistory(roomId, 0, HISTORY_PAGE), api.roomStats(roomId, STATS_DEFAULT)])
-      .then(([rooms, nextHistory, nextStats]) => {
+    Promise.all([
+      api.listRooms(),
+      api.roomHistory(roomId, 0, HISTORY_PAGE),
+      api.roomStats(roomId, STATS_DEFAULT),
+      canManagePolicy ? api.listPrincipals(undefined, 100).catch(() => []) : Promise.resolve([]),
+    ])
+      .then(async ([rooms, nextHistory, nextStats, principals]) => {
         if (cancelled) return;
         const room = rooms.find((item) => item.id === roomId);
         if (!room) {
@@ -104,12 +116,40 @@ export function RoomAdminPanel({
           return;
         }
 
+        const nextPrincipalNames = new Map(
+          principals.map((principal) => [principal.id, principal.name]),
+        );
+        if (canManagePolicy) {
+          const missingIds = [
+            ...new Set(
+              nextHistory
+                .map((entry) => entry.requested_by)
+                .filter((id) => id && !nextPrincipalNames.has(id)),
+            ),
+          ];
+          const resolved = await Promise.all(
+            missingIds.map(async (principalId) => {
+              try {
+                const matches = await api.listPrincipals(principalId, 10);
+                return matches.find((principal) => principal.id === principalId) ?? null;
+              } catch {
+                return null;
+              }
+            }),
+          );
+          for (const principal of resolved) {
+            if (principal) nextPrincipalNames.set(principal.id, principal.name);
+          }
+        }
+        if (cancelled) return;
         setMaxQueue(String(room.policy.max_queue ?? 0));
         setQueueLimits(
           Object.entries(room.policy.queue_limits ?? {})
             .filter(([role]) => QUEUE_LIMIT_ROLE_LOOKUP[role])
             .map(([role, value]) => ({ role: role as QueueLimitRole, value: String(value) })),
         );
+        setMemberPlayerVolume(room.policy.member_player_volume ?? false);
+        setPrincipalNames(nextPrincipalNames);
         setHistory(nextHistory);
         setHistoryHasMore(nextHistory.length >= HISTORY_PAGE);
         setStats(nextStats);
@@ -127,7 +167,7 @@ export function RoomAdminPanel({
     return () => {
       cancelled = true;
     };
-  }, [loadVersion, open, roomId, showError]);
+  }, [canManagePolicy, loadVersion, open, roomId, showError]);
 
   const selectedRoles = new Set(queueLimits.map((row) => row.role));
   const nextRole = QUEUE_LIMIT_ROLES.find((role) => !selectedRoles.has(role));
@@ -328,6 +368,7 @@ export function RoomAdminPanel({
                         policy: {
                           max_queue: Math.max(0, Math.floor(Number(maxQueue) || 0)),
                           queue_limits: limits,
+                          member_player_volume: memberPlayerVolume,
                         },
                       })
                       .then(() => show(t('roomAdmin.policySaved')))
@@ -347,6 +388,26 @@ export function RoomAdminPanel({
                     />
                   </label>
                   <p className="mt-1 text-[11px] text-faint">{t('roomAdmin.zeroUnlimited')}</p>
+
+                  <div className="mt-4 flex items-center justify-between gap-4 rounded-md border border-hairline bg-panel px-3 py-2.5">
+                    <div className="text-xs text-muted">{t('roomAdmin.memberPlayerVolume')}</div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={memberPlayerVolume}
+                      aria-label={t('roomAdmin.memberPlayerVolume')}
+                      onClick={() => setMemberPlayerVolume((value) => !value)}
+                      className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+                        memberPlayerVolume ? 'bg-accent' : 'border border-hairline bg-[var(--rail)]'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full transition-[left,background-color] ${
+                          memberPlayerVolume ? 'left-[19px] bg-on-accent' : 'left-[3px] bg-muted'
+                        }`}
+                      />
+                    </button>
+                  </div>
 
                   <div className="mt-4 flex items-center justify-between gap-3">
                     <h3 className="text-xs font-medium text-muted">{t('roomAdmin.queueLimits')}</h3>
@@ -432,6 +493,9 @@ export function RoomAdminPanel({
             </section>
             )}
           </div>
+          <RoomOutputPanel roomId={roomId} />
+          {canManagePolicy && <RoomGrantPanel roomId={roomId} />}
+
 
           <section className="mt-4 rounded-md border border-hairline bg-panel-2 p-4">
             <Tabs
@@ -459,7 +523,11 @@ export function RoomAdminPanel({
                           {history.map((entry) => (
                             <tr key={`${entry.track_ref}:${entry.started_at}`} className="border-b border-hairline last:border-b-0">
                               <td className="px-2 py-2.5 text-paper">{entry.title}</td>
-                              <td className="px-2 py-2.5 text-muted">{entry.requested_by}</td>
+                              <td className="px-2 py-2.5 text-muted">
+                                {principalNames.get(entry.requested_by) ??
+                                  requesterNames.get(entry.requested_by) ??
+                                  entry.requested_by}
+                              </td>
                               <td className="whitespace-nowrap px-2 py-2.5 font-mono text-xs text-muted">
                                 {formatDateTime(entry.ended_at)}
                               </td>

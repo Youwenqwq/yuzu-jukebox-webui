@@ -257,69 +257,67 @@ export default function MediaAdmin() {
 
   return (
     <div className="grid gap-7">
-      <section className="rounded-md border border-hairline bg-panel p-5">
-        <div className="mb-4">
-          <h2 className="font-display text-xl font-semibold">{t('admin.media.uploadHeading')}</h2>
-          <p className="mt-1 text-sm text-muted">{t('admin.media.uploadIntro')}</p>
-        </div>
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            void upload();
-          }}
-          className="grid gap-3 md:grid-cols-[minmax(180px,1.2fr)_1fr_1fr_auto] md:items-end"
-        >
-          <label className="text-xs text-muted">
-            {t('admin.media.fileLabel')}
-            <input
-              ref={uploadInput}
-              type="file"
-              accept="audio/*"
-              onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
-              className="mt-1.5 block w-full text-xs text-muted file:mr-3 file:rounded-full file:border file:border-hairline file:bg-panel-2 file:px-3 file:py-1.5 file:text-xs file:text-paper"
-              required
-            />
-          </label>
-          <label className="text-xs text-muted">
-            {t('admin.media.titleLabel')}
-            <input
-              value={uploadTitle}
-              onChange={(event) => setUploadTitle(event.target.value)}
-              placeholder={t('admin.media.titlePlaceholder')}
-              className={`${inputClass} mt-1.5`}
-            />
-          </label>
-          <label className="text-xs text-muted">
-            {t('admin.media.artistLabel')}
-            <input
-              value={uploadArtist}
-              onChange={(event) => setUploadArtist(event.target.value)}
-              placeholder={t('admin.media.artistPlaceholder')}
-              className={`${inputClass} mt-1.5`}
-            />
-          </label>
-          <button type="submit" disabled={!uploadFile || uploadBusy} className={primaryButtonClass}>
-            {uploadBusy ? t('admin.media.uploading') : t('admin.media.upload')}
-          </button>
-        </form>
-      </section>
 
       <section>
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h2 className="font-display text-xl font-semibold">{t('admin.media.libraryHeading')}</h2>
-            <p className="mt-1 text-sm text-muted">{t('admin.media.libraryIntro')}</p>
           </div>
           <button type="button" onClick={() => void loadMedia()} disabled={mediaBusy} className={secondaryButtonClass}>
             {mediaBusy ? t('admin.common.working') : t('admin.common.refresh')}
           </button>
+        </div>
+        <div className="mb-5 rounded-md border border-hairline bg-panel p-5">
+          <div className="mb-4">
+            <h3 className="font-display text-xl font-semibold">{t('admin.media.uploadHeading')}</h3>
+          </div>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void upload();
+            }}
+            className="grid gap-3 md:grid-cols-[minmax(180px,1.2fr)_1fr_1fr_auto] md:items-end"
+          >
+            <label className="text-xs text-muted">
+              {t('admin.media.fileLabel')}
+              <input
+                ref={uploadInput}
+                type="file"
+                accept="audio/*"
+                onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
+                className="mt-1.5 block w-full text-xs text-muted file:mr-3 file:rounded-full file:border file:border-hairline file:bg-panel-2 file:px-3 file:py-1.5 file:text-xs file:text-paper"
+                required
+              />
+            </label>
+            <label className="text-xs text-muted">
+              {t('admin.media.titleLabel')}
+              <input
+                value={uploadTitle}
+                onChange={(event) => setUploadTitle(event.target.value)}
+                placeholder={t('admin.media.titlePlaceholder')}
+                className={`${inputClass} mt-1.5`}
+              />
+            </label>
+            <label className="text-xs text-muted">
+              {t('admin.media.artistLabel')}
+              <input
+                value={uploadArtist}
+                onChange={(event) => setUploadArtist(event.target.value)}
+                placeholder={t('admin.media.artistPlaceholder')}
+                className={`${inputClass} mt-1.5`}
+              />
+            </label>
+            <button type="submit" disabled={!uploadFile || uploadBusy} className={primaryButtonClass}>
+              {uploadBusy ? t('admin.media.uploading') : t('admin.media.upload')}
+            </button>
+          </form>
         </div>
         {media === null ? (
           <p className="py-6 text-center text-sm text-faint">{t('common.loading')}</p>
         ) : media.length === 0 ? (
           <p className="py-6 text-center text-sm text-faint">{t('admin.media.libraryEmpty')}</p>
         ) : (
-          <div className="overflow-x-auto rounded-md border border-hairline">
+          <div className="overflow-x-auto rounded-md border border-hairline bg-panel">
             <table className="w-full text-left text-[13px]">
               <thead>
                 <tr className="border-b border-hairline text-xs text-faint">
@@ -370,7 +368,6 @@ export default function MediaAdmin() {
       <section>
         <div className="mb-4">
           <h2 className="font-display text-xl font-semibold">{t('admin.media.providersHeading')}</h2>
-          <p className="mt-1 text-sm text-muted">{t('admin.media.providersIntro')}</p>
         </div>
         {providers === null ? (
           <p className="py-6 text-center text-sm text-faint">{t('common.loading')}</p>
@@ -424,7 +421,6 @@ export default function MediaAdmin() {
         <div className="mb-4 flex items-end justify-between gap-4">
           <div>
             <h2 className="font-display text-xl font-semibold">{t('admin.media.cacheHeading')}</h2>
-            <p className="mt-1 text-sm text-muted">{t('admin.media.cacheIntro')}</p>
             {cache && (
               <p className="mt-1 font-mono text-xs text-faint tabular-nums">
                 {t('admin.media.cacheTotal', {

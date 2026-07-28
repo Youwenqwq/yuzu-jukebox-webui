@@ -207,6 +207,7 @@ export default function RoomView() {
                 roomId={roomId}
                 radio={state.radio}
                 canManagePolicy={isRoomAdmin}
+                requesterNames={nameById}
               />
             )}
           </div>
