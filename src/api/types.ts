@@ -17,10 +17,26 @@ export interface RoomNowPlaying {
   rate: number;
 }
 
+export type RoomAccessMode = 'open' | 'static_password' | 'rotating_code';
+
+export interface RoomGuestAccess {
+  mode: RoomAccessMode;
+  /** Present only when mode is rotating_code. */
+  code_period_seconds?: number;
+}
+
+export interface RoomAccessCode {
+  code: string;
+  period_seconds: number;
+  valid_from: number;
+  expires_at: number;
+}
+
 export interface RoomInfo {
   id: string;
   name: string;
   policy: RoomPolicy;
+  guest_access: RoomGuestAccess;
   listener_count: number;
   now_playing: RoomNowPlaying | null;
 }
@@ -29,18 +45,23 @@ export interface CreateRoomInput {
   id?: string;
   name: string;
   guest_password?: string;
+  guest_access_mode?: RoomAccessMode;
+  guest_code_period_seconds?: number;
   policy?: RoomPolicy;
 }
 
 export interface UpdateRoomInput {
   name?: string;
   guest_password?: string;
+  guest_access_mode?: RoomAccessMode;
+  guest_code_period_seconds?: number;
   policy?: RoomPolicy;
 }
 
 export interface RoomMutationResult {
   id: string;
   name: string;
+  guest_access?: RoomGuestAccess;
 }
 
 export interface HistoryEntry {
@@ -190,27 +211,50 @@ export interface QrLoginPollResult {
   message: string;
 }
 
+/** Persistent Player resource merged with online runtime state. */
 export interface PlayerInfo {
   id: string;
-  device: string;
+  name: string;
+  active: boolean;
+  key_configured: boolean;
+  online: boolean;
+  room_id?: string;
+  device?: string;
   version?: string;
   caps: string[];
-  identity_name: string;
-  room_id?: string;
-  volume: number;
-  muted: boolean;
-  connected_at: number;
+  volume?: number;
+  muted?: boolean;
+  created_at: number;
+  updated_at: number;
+  last_seen_at?: number | null;
+  connected_at?: number;
+}
+
+export interface PlayerCredentialResult {
+  player: PlayerInfo;
+  key: string;
+}
+
+export interface CreatePlayerInput {
+  id: string;
+  name: string;
+}
+
+export interface UpdatePlayerInput {
+  name?: string;
+  active?: boolean;
 }
 
 export interface RoomPlayerInfo {
   id: string;
+  name: string;
+  active: boolean;
   bound: boolean;
   online: boolean;
   device?: string;
   room_id?: string;
   volume: number;
   muted: boolean;
-  identity_name?: string;
 }
 
 export interface RoomOutput {
@@ -225,7 +269,7 @@ export interface RoomOutputUpdate {
   };
 }
 
-export type PlayerCommandOp = 'set_volume' | 'set_mute' | 'join_room';
+export type PlayerCommandOp = 'set_volume' | 'set_mute';
 
 export interface PlayerCommandResult {
   ok: true;

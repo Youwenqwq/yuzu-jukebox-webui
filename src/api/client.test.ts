@@ -252,7 +252,11 @@ describe('ApiClient', () => {
   });
 
   it('manages rooms with the server wire format and unwraps history and stats', async () => {
-    const room = { id: 'room /一', name: 'Morning' };
+    const room = {
+      id: 'room /一',
+      name: 'Morning',
+      guest_access: { mode: 'static_password' as const },
+    };
     const history = {
       track_ref: 'ncm:42',
       title: 'Song',
@@ -268,13 +272,28 @@ describe('ApiClient', () => {
       first_played_at: 100,
       last_played_at: 300,
     };
+    const accessCode = {
+      code: '7M2K-Q9TR-W4HX',
+      period_seconds: 86400,
+      valid_from: 1_720_000_000_000,
+      expires_at: 1_720_086_400_000,
+    };
     const fetchFn = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(jsonResponse({ room }))
-      .mockResolvedValueOnce(jsonResponse({ room: { ...room, name: 'Evening' } }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          room: {
+            ...room,
+            name: 'Evening',
+            guest_access: { mode: 'open' },
+          },
+        }),
+      )
       .mockResolvedValueOnce(jsonResponse({ ok: true }))
       .mockResolvedValueOnce(jsonResponse({ history: [history] }))
-      .mockResolvedValueOnce(jsonResponse({ stats: [stat] }));
+      .mockResolvedValueOnce(jsonResponse({ stats: [stat] }))
+      .mockResolvedValueOnce(jsonResponse({ room_id: room.id, access_code: accessCode }));
     const client = new ApiClient(() => 'admin-token', {
       base: 'https://yuzu.test',
       fetchFn,
@@ -284,6 +303,7 @@ describe('ApiClient', () => {
       client.createRoom({
         id: room.id,
         name: room.name,
+        guest_access_mode: 'static_password',
         guest_password: 'guest',
         policy: { max_queue: 20, queue_limits: { requester: 5 } },
       }),
@@ -291,13 +311,18 @@ describe('ApiClient', () => {
     await expect(
       client.updateRoom(room.id, {
         name: 'Evening',
-        guest_password: '',
+        guest_access_mode: 'open',
         policy: { max_queue: 30, member_player_volume: true },
       }),
-    ).resolves.toEqual({ ...room, name: 'Evening' });
+    ).resolves.toEqual({
+      ...room,
+      name: 'Evening',
+      guest_access: { mode: 'open' },
+    });
     await expect(client.deleteRoom(room.id)).resolves.toBeUndefined();
     await expect(client.roomHistory(room.id, 10, 25)).resolves.toEqual([history]);
     await expect(client.roomStats(room.id, 7)).resolves.toEqual([stat]);
+    await expect(client.roomAccessCode(room.id)).resolves.toEqual(accessCode);
 
     const encodedRoom = 'room%20%2F%E4%B8%80';
     const [createUrl, createInit] = fetchFn.mock.calls[0];
@@ -306,6 +331,7 @@ describe('ApiClient', () => {
     expect(JSON.parse(String(createInit?.body))).toEqual({
       id: room.id,
       name: room.name,
+      guest_access_mode: 'static_password',
       guest_password: 'guest',
       policy: '{"max_queue":20,"queue_limits":{"requester":5}}',
     });
@@ -315,7 +341,7 @@ describe('ApiClient', () => {
     expect(updateInit?.method).toBe('PATCH');
     expect(JSON.parse(String(updateInit?.body))).toEqual({
       name: 'Evening',
-      guest_password: '',
+      guest_access_mode: 'open',
       policy: '{"max_queue":30,"member_player_volume":true}',
     });
     expect(fetchFn.mock.calls[2][0]).toBe(`https://yuzu.test/api/v1/rooms/${encodedRoom}`);
@@ -325,6 +351,9 @@ describe('ApiClient', () => {
     );
     expect(fetchFn.mock.calls[4][0]).toBe(
       `https://yuzu.test/api/v1/rooms/${encodedRoom}/stats?limit=7`,
+    );
+    expect(fetchFn.mock.calls[5][0]).toBe(
+      `https://yuzu.test/api/v1/rooms/${encodedRoom}/access-code`,
     );
   });
 
@@ -509,21 +538,33 @@ describe('ApiClient', () => {
     );
   });
 
-  it('unwraps players and sends the exact player command body', async () => {
+  it('manages persistent players and online device commands', async () => {
     const player = {
       id: 'player / stage',
+      name: 'Stage',
+      active: true,
+      key_configured: true,
+      online: true,
+      room_id: 'main',
       device: 'raspberry-pi',
       version: '1.2.3',
-      caps: ['audio'],
-      identity_name: 'Stage',
-      room_id: 'main',
+      caps: ['volume', 'mute'],
       volume: 75,
       muted: false,
+      created_at: 1000,
+      updated_at: 1200,
+      last_seen_at: 1300,
       connected_at: 1234,
     };
+    const credential = { player, key: 'yzp_secret' };
     const fetchFn = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(jsonResponse({ players: [player] }))
+      .mockResolvedValueOnce(jsonResponse({ player }))
+      .mockResolvedValueOnce(jsonResponse(credential, 201))
+      .mockResolvedValueOnce(jsonResponse({ player: { ...player, name: 'Stage Left' } }))
+      .mockResolvedValueOnce(jsonResponse(credential))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }))
       .mockResolvedValueOnce(jsonResponse({ ok: true }));
     const client = new ApiClient(() => 'admin-token', {
       base: 'https://yuzu.test',
@@ -531,18 +572,40 @@ describe('ApiClient', () => {
     });
 
     await expect(client.listPlayers()).resolves.toEqual([player]);
-    await expect(client.playerCommand(player.id, 'join_room', 'room /一')).resolves.toEqual({
-      ok: true,
-    });
-
-    expect(fetchFn.mock.calls[0][0]).toBe('https://yuzu.test/api/v1/players');
-    expect(fetchFn.mock.calls[1][0]).toBe(
-      'https://yuzu.test/api/v1/players/player%20%2F%20stage/command',
+    await expect(client.getPlayer(player.id)).resolves.toEqual(player);
+    await expect(client.createPlayer({ id: player.id, name: player.name })).resolves.toEqual(
+      credential,
     );
-    expect(fetchFn.mock.calls[1][1]?.method).toBe('POST');
-    expect(JSON.parse(String(fetchFn.mock.calls[1][1]?.body))).toEqual({
-      op: 'join_room',
-      value: 'room /一',
+    await expect(client.updatePlayer(player.id, { name: 'Stage Left' })).resolves.toEqual({
+      ...player,
+      name: 'Stage Left',
+    });
+    await expect(client.rotatePlayerKey(player.id)).resolves.toEqual(credential);
+    await expect(client.deletePlayer(player.id)).resolves.toBeUndefined();
+    await expect(client.playerCommand(player.id, 'set_volume', 42)).resolves.toEqual({ ok: true });
+
+    const encodedPlayer = 'player%20%2F%20stage';
+    expect(fetchFn.mock.calls.map(([url]) => url)).toEqual([
+      'https://yuzu.test/api/v1/players',
+      `https://yuzu.test/api/v1/players/${encodedPlayer}`,
+      'https://yuzu.test/api/v1/players',
+      `https://yuzu.test/api/v1/players/${encodedPlayer}`,
+      `https://yuzu.test/api/v1/players/${encodedPlayer}/key`,
+      `https://yuzu.test/api/v1/players/${encodedPlayer}`,
+      `https://yuzu.test/api/v1/players/${encodedPlayer}/command`,
+    ]);
+    expect(fetchFn.mock.calls[2][1]?.method).toBe('POST');
+    expect(JSON.parse(String(fetchFn.mock.calls[2][1]?.body))).toEqual({
+      id: player.id,
+      name: player.name,
+    });
+    expect(fetchFn.mock.calls[3][1]?.method).toBe('PATCH');
+    expect(JSON.parse(String(fetchFn.mock.calls[3][1]?.body))).toEqual({ name: 'Stage Left' });
+    expect(fetchFn.mock.calls[4][1]?.method).toBe('POST');
+    expect(fetchFn.mock.calls[5][1]?.method).toBe('DELETE');
+    expect(JSON.parse(String(fetchFn.mock.calls[6][1]?.body))).toEqual({
+      op: 'set_volume',
+      value: 42,
     });
   });
 
@@ -550,16 +613,19 @@ describe('ApiClient', () => {
     const roomId = 'room /一';
     const player = {
       id: 'player / stage',
+      name: 'Stage',
+      active: true,
       bound: true,
       online: true,
       device: 'speaker-01',
       room_id: roomId,
       volume: 42,
       muted: false,
-      identity_name: 'Living Room',
     };
     const offlinePlayer = {
       id: 'living-room-right',
+      name: 'Living Room Right',
+      active: true,
       bound: true,
       online: false,
       volume: 0,

@@ -5,11 +5,13 @@
 import { ApiClient } from '../api/client';
 import { createOidcFlow } from '../auth/oidc';
 import { createSessionTokenStore } from '../auth/token';
+import { createRoomCredentialStore } from '../auth/roomCredentials';
 import { YuzuClient } from '../protocol/client';
 import { SessionStore } from '../protocol/store';
 import type { Identity } from '../protocol/types';
 
 export const tokenStore = createSessionTokenStore();
+export const roomCredentials = createRoomCredentialStore();
 export const api = new ApiClient(() => tokenStore.get(), {
   onUnauthorized: () => tokenStore.clear(),
 });
@@ -93,6 +95,7 @@ export const session = {
   async logout(): Promise<void> {
     await api.logout().catch(() => {});
     tokenStore.clear();
+    roomCredentials.clearAll();
     client.close();
     setIdentity(null);
   },

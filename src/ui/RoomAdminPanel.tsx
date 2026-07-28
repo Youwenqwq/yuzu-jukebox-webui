@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { HistoryEntry, StatsEntry } from '../api/types';
+import type { HistoryEntry, RoomAccessCode, RoomAccessMode, StatsEntry } from '../api/types';
 import { api, roomStore } from '../app/session';
 import type { RadioState } from '../protocol/types';
 import { formatDateTime } from './format';
@@ -77,6 +77,13 @@ export function RoomAdminPanel({
   const [memberPlayerVolume, setMemberPlayerVolume] = useState(false);
   const [policySaving, setPolicySaving] = useState(false);
 
+  const [accessMode, setAccessMode] = useState<RoomAccessMode>('open');
+  const [accessPassword, setAccessPassword] = useState('');
+  const [codePeriodHours, setCodePeriodHours] = useState('24');
+  const [accessSaving, setAccessSaving] = useState(false);
+  const [accessCode, setAccessCode] = useState<RoomAccessCode | null>(null);
+  const [accessCodeLoading, setAccessCodeLoading] = useState(false);
+
   const infiniteSource = INFINITE_SOURCE_RE.test(radioSource.trim());
 
   useEffect(() => {
@@ -149,6 +156,17 @@ export function RoomAdminPanel({
             .map(([role, value]) => ({ role: role as QueueLimitRole, value: String(value) })),
         );
         setMemberPlayerVolume(room.policy.member_player_volume ?? false);
+        setAccessMode(room.guest_access?.mode ?? 'open');
+        setAccessPassword('');
+        setCodePeriodHours(
+          String(
+            Math.max(
+              1,
+              Math.round((room.guest_access?.code_period_seconds ?? 86400) / 3600),
+            ),
+          ),
+        );
+        setAccessCode(null);
         setPrincipalNames(nextPrincipalNames);
         setHistory(nextHistory);
         setHistoryHasMore(nextHistory.length >= HISTORY_PAGE);
@@ -190,6 +208,62 @@ export function RoomAdminPanel({
     try {
       setStats(await api.roomStats(roomId, STATS_MAX));
       setStatsExpanded(true);
+    } catch (error: unknown) {
+      showError(error);
+    }
+  };
+
+  const saveAccess = async () => {
+    if (!canManagePolicy || accessSaving) return;
+    if (accessMode === 'static_password' && !accessPassword.trim()) return;
+    setAccessSaving(true);
+    try {
+      const periodHours = Math.max(1, Math.floor(Number(codePeriodHours) || 24));
+      const result = await api.updateRoom(roomId, {
+        guest_access_mode: accessMode,
+        guest_password:
+          accessMode === 'static_password' ? accessPassword : undefined,
+        guest_code_period_seconds:
+          accessMode === 'rotating_code' ? periodHours * 3600 : undefined,
+      });
+      if (result.guest_access) {
+        setAccessMode(result.guest_access.mode);
+        setCodePeriodHours(
+          String(
+            Math.max(
+              1,
+              Math.round((result.guest_access.code_period_seconds ?? 86400) / 3600),
+            ),
+          ),
+        );
+      }
+      setAccessPassword('');
+      setAccessCode(null);
+      show(t('roomAdmin.accessSaved'));
+    } catch (error: unknown) {
+      showError(error);
+    } finally {
+      setAccessSaving(false);
+    }
+  };
+
+  const loadAccessCode = async () => {
+    if (!canManagePolicy || accessCodeLoading) return;
+    setAccessCodeLoading(true);
+    try {
+      setAccessCode(await api.roomAccessCode(roomId));
+    } catch (error: unknown) {
+      showError(error);
+    } finally {
+      setAccessCodeLoading(false);
+    }
+  };
+
+  const copyAccessCode = async () => {
+    if (!accessCode) return;
+    try {
+      await navigator.clipboard.writeText(accessCode.code);
+      show(t('roomAdmin.accessCodeCopied'));
     } catch (error: unknown) {
       showError(error);
     }
@@ -494,6 +568,136 @@ export function RoomAdminPanel({
             )}
           </div>
           <RoomOutputPanel roomId={roomId} />
+          {canManagePolicy && (
+            <section className="mt-4 rounded-md border border-hairline bg-panel-2 p-4">
+              <h2 className="font-display text-lg font-semibold">{t('roomAdmin.accessTitle')}</h2>
+              <p className="mt-0.5 text-xs text-muted">{t('roomAdmin.accessIntro')}</p>
+              {loading ? (
+                <p className="mt-4 text-sm text-muted">{t('common.loading')}</p>
+              ) : loadFailed ? (
+                <div className="mt-4 text-sm text-muted">
+                  {t('roomAdmin.loadFailed')}
+                  <button
+                    type="button"
+                    onClick={() => setLoadVersion((value) => value + 1)}
+                    className="ml-3 text-accent"
+                  >
+                    {t('common.retry')}
+                  </button>
+                </div>
+              ) : (
+                <form
+                  className="mt-3"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void saveAccess();
+                  }}
+                >
+                  <div>
+                    <span className="block text-xs text-muted">{t('roomAdmin.accessMode')}</span>
+                    <Select
+                      value={accessMode}
+                      onValueChange={(value) => setAccessMode(value as RoomAccessMode)}
+                      options={[
+                        { value: 'open', label: t('roomAdmin.accessModeOpen') },
+                        { value: 'static_password', label: t('roomAdmin.accessModeStatic') },
+                        { value: 'rotating_code', label: t('roomAdmin.accessModeRotating') },
+                      ]}
+                      ariaLabel={t('roomAdmin.accessMode')}
+                      className="mt-1.5 w-full"
+                    />
+                  </div>
+
+                  {accessMode === 'static_password' && (
+                    <label className="mt-3 block text-xs text-muted">
+                      {t('roomAdmin.accessPassword')}
+                      <input
+                        type="password"
+                        required
+                        value={accessPassword}
+                        onChange={(event) => setAccessPassword(event.target.value)}
+                        placeholder={t('roomAdmin.accessPasswordPlaceholder')}
+                        className="mt-1.5 w-full rounded-md border border-hairline bg-panel px-3 py-2 text-[13px] placeholder:text-faint"
+                      />
+                      <span className="mt-1 block text-[11px] text-faint">
+                        {t('roomAdmin.accessPasswordHint')}
+                      </span>
+                    </label>
+                  )}
+
+                  {accessMode === 'rotating_code' && (
+                    <label className="mt-3 block text-xs text-muted">
+                      {t('roomAdmin.codePeriodHours')}
+                      <input
+                        type="number"
+                        min={1}
+                        max={720}
+                        step={1}
+                        value={codePeriodHours}
+                        onChange={(event) => setCodePeriodHours(event.target.value)}
+                        className="mt-1.5 w-full rounded-md border border-hairline bg-panel px-3 py-2 text-[13px] tabular-nums"
+                      />
+                      <span className="mt-1 block text-[11px] text-faint">
+                        {t('roomAdmin.codePeriodHint')}
+                      </span>
+                    </label>
+                  )}
+
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <button
+                      type="submit"
+                      disabled={
+                        accessSaving ||
+                        (accessMode === 'static_password' && !accessPassword.trim())
+                      }
+                      className="rounded-full bg-accent px-4 py-1.5 text-[13px] font-medium text-on-accent hover:brightness-105 disabled:opacity-40"
+                    >
+                      {accessSaving ? t('roomAdmin.accessSaving') : t('roomAdmin.accessSave')}
+                    </button>
+                    {accessMode === 'rotating_code' && (
+                      <button
+                        type="button"
+                        disabled={accessCodeLoading}
+                        onClick={() => void loadAccessCode()}
+                        className="rounded-full border border-hairline px-4 py-1.5 text-[13px] text-muted hover:border-faint hover:text-paper disabled:opacity-40"
+                      >
+                        {accessCodeLoading
+                          ? t('roomAdmin.accessCodeLoading')
+                          : t('roomAdmin.accessCodeShow')}
+                      </button>
+                    )}
+                  </div>
+
+                  {accessMode === 'rotating_code' && accessCode && (
+                    <div className="mt-4 rounded-md border border-[#D7A94A]/40 bg-[#D7A94A]/8 p-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-semibold text-paper">
+                            {t('roomAdmin.accessCodeLabel')}
+                          </p>
+                          <p className="mt-1 text-xs text-muted">
+                            {t('roomAdmin.accessCodeExpires', {
+                              time: formatDateTime(accessCode.expires_at),
+                            })}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void copyAccessCode()}
+                          className="rounded-full border border-hairline px-3 py-1 text-xs text-muted hover:border-faint hover:text-paper"
+                        >
+                          {t('roomAdmin.accessCodeCopy')}
+                        </button>
+                      </div>
+                      <code className="mt-3 block select-all break-all rounded bg-canvas px-3 py-2 font-mono text-sm tracking-[0.18em] text-paper">
+                        {accessCode.code}
+                      </code>
+                    </div>
+                  )}
+                </form>
+              )}
+            </section>
+          )}
           {canManagePolicy && <RoomGrantPanel roomId={roomId} />}
 
 

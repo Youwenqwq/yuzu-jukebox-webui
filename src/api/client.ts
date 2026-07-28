@@ -5,6 +5,7 @@ import type {
   AddPlaylistItemsResult,
   CacheOverview,
   CreatePlaylistInput,
+  CreatePlayerInput,
   CreateRoomInput,
   CredentialResult,
   DeletePlaylistItemResult,
@@ -24,6 +25,7 @@ import type {
   OidcConfig,
   PlayerCommandOp,
   PlayerCommandResult,
+  PlayerCredentialResult,
   PlayerInfo,
   PlaylistDetail,
   PlaylistItem,
@@ -33,6 +35,7 @@ import type {
   PrincipalInfo,
   QrLoginPollResult,
   QrLoginStartResult,
+  RoomAccessCode,
   RoomCapabilities,
   RoomControllerGrant,
   RoomInfo,
@@ -42,6 +45,7 @@ import type {
   RoomPlayerInfo,
   SearchTrack,
   StatsEntry,
+  UpdatePlayerInput,
   UpdateRoomInput,
   UploadMediaMeta,
 } from './types';
@@ -153,6 +157,13 @@ export class ApiClient {
     await this.#json<{ ok: true }>(`/api/v1/rooms/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
+  }
+
+  async roomAccessCode(id: string): Promise<RoomAccessCode> {
+    const result = await this.#json<{ room_id: string; access_code: RoomAccessCode }>(
+      `/api/v1/rooms/${encodeURIComponent(id)}/access-code`,
+    );
+    return result.access_code;
   }
 
   async roomCapabilities(id: string): Promise<RoomCapabilities> {
@@ -522,10 +533,47 @@ export class ApiClient {
     return asList(result.players);
   }
 
+  async getPlayer(id: string): Promise<PlayerInfo> {
+    const result = await this.#json<{ player: PlayerInfo }>(
+      `/api/v1/players/${encodeURIComponent(id)}`,
+    );
+    return result.player;
+  }
+
+  async createPlayer(input: CreatePlayerInput): Promise<PlayerCredentialResult> {
+    return this.#json<PlayerCredentialResult>('/api/v1/players', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  async updatePlayer(id: string, patch: UpdatePlayerInput): Promise<PlayerInfo> {
+    const result = await this.#json<{ player: PlayerInfo }>(
+      `/api/v1/players/${encodeURIComponent(id)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
+      },
+    );
+    return result.player;
+  }
+
+  async rotatePlayerKey(id: string): Promise<PlayerCredentialResult> {
+    return this.#json<PlayerCredentialResult>(`/api/v1/players/${encodeURIComponent(id)}/key`, {
+      method: 'POST',
+    });
+  }
+
+  async deletePlayer(id: string): Promise<void> {
+    await this.#json<{ ok: true }>(`/api/v1/players/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  }
+
   async playerCommand(
     id: string,
     op: PlayerCommandOp,
-    value: number | boolean | string,
+    value: number | boolean,
   ): Promise<PlayerCommandResult> {
     return this.#json<PlayerCommandResult>(
       `/api/v1/players/${encodeURIComponent(id)}/command`,

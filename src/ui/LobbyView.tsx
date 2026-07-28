@@ -1,12 +1,12 @@
 import { useEffect, useReducer, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import type { RoomInfo } from '../api/types';
+import type { RoomAccessMode, RoomInfo } from '../api/types';
 import { api, client, session } from '../app/session';
 import { useIdentity } from './hooks';
 import ExternalBindingDialog from './ExternalBindingDialog';
 import ThemeControls from './ThemeControls';
-import { ConfirmDialog, Dialog } from './primitives';
+import { ConfirmDialog, Dialog, Select } from './primitives';
 import { useToast } from './toast';
 
 export default function LobbyView() {
@@ -133,7 +133,9 @@ function CreateRoomCard({ onCreated }: { onCreated: () => void }) {
   const [open, setOpen] = useState(false);
   const [roomId, setRoomId] = useState('');
   const [name, setName] = useState('');
+  const [accessMode, setAccessMode] = useState<RoomAccessMode>('open');
   const [guestPassword, setGuestPassword] = useState('');
+  const [codePeriodHours, setCodePeriodHours] = useState('24');
   const [creating, setCreating] = useState(false);
 
   return (
@@ -152,19 +154,27 @@ function CreateRoomCard({ onCreated }: { onCreated: () => void }) {
             event.preventDefault();
             const trimmedName = name.trim();
             if (!trimmedName || creating) return;
+            if (accessMode === 'static_password' && !guestPassword) return;
+            const periodHours = Math.max(1, Math.floor(Number(codePeriodHours) || 24));
             setCreating(true);
             void api
               .createRoom({
                 id: roomId.trim() || undefined,
                 name: trimmedName,
-                guest_password: guestPassword || undefined,
+                guest_access_mode: accessMode,
+                guest_password:
+                  accessMode === 'static_password' ? guestPassword : undefined,
+                guest_code_period_seconds:
+                  accessMode === 'rotating_code' ? periodHours * 3600 : undefined,
               })
               .then(() => {
                 show(t('lobby.roomCreated', { name: trimmedName }));
                 setOpen(false);
                 setRoomId('');
                 setName('');
+                setAccessMode('open');
                 setGuestPassword('');
+                setCodePeriodHours('24');
                 onCreated();
               })
               .catch(showError)
@@ -190,16 +200,48 @@ function CreateRoomCard({ onCreated }: { onCreated: () => void }) {
               className="mt-1.5 w-full rounded-md border border-hairline bg-panel px-3 py-2 text-[13px] placeholder:text-faint"
             />
           </label>
-          <label className="mt-4 block text-xs text-muted">
-            {t('lobby.guestPassword')}
-            <input
-              type="password"
-              value={guestPassword}
-              onChange={(event) => setGuestPassword(event.target.value)}
-              placeholder={t('lobby.guestPasswordPlaceholder')}
-              className="mt-1.5 w-full rounded-md border border-hairline bg-panel px-3 py-2 text-[13px] placeholder:text-faint"
+          <div className="mt-4">
+            <span className="block text-xs text-muted">{t('lobby.accessMode')}</span>
+            <Select
+              value={accessMode}
+              onValueChange={(value) => setAccessMode(value as RoomAccessMode)}
+              options={[
+                { value: 'open', label: t('lobby.accessModeOpen') },
+                { value: 'static_password', label: t('lobby.accessModeStatic') },
+                { value: 'rotating_code', label: t('lobby.accessModeRotating') },
+              ]}
+              ariaLabel={t('lobby.accessMode')}
+              className="mt-1.5 w-full"
             />
-          </label>
+          </div>
+          {accessMode === 'static_password' && (
+            <label className="mt-4 block text-xs text-muted">
+              {t('lobby.guestPassword')}
+              <input
+                type="password"
+                required
+                value={guestPassword}
+                onChange={(event) => setGuestPassword(event.target.value)}
+                placeholder={t('lobby.guestPasswordRequiredPlaceholder')}
+                className="mt-1.5 w-full rounded-md border border-hairline bg-panel px-3 py-2 text-[13px] placeholder:text-faint"
+              />
+            </label>
+          )}
+          {accessMode === 'rotating_code' && (
+            <label className="mt-4 block text-xs text-muted">
+              {t('lobby.codePeriodHours')}
+              <input
+                type="number"
+                min={1}
+                max={720}
+                step={1}
+                value={codePeriodHours}
+                onChange={(event) => setCodePeriodHours(event.target.value)}
+                className="mt-1.5 w-full rounded-md border border-hairline bg-panel px-3 py-2 text-[13px] tabular-nums"
+              />
+              <span className="mt-1 block text-[11px] text-faint">{t('lobby.codePeriodHint')}</span>
+            </label>
+          )}
           <div className="mt-6 flex justify-end gap-3">
             <button
               type="button"
@@ -211,7 +253,11 @@ function CreateRoomCard({ onCreated }: { onCreated: () => void }) {
             </button>
             <button
               type="submit"
-              disabled={creating || !name.trim()}
+              disabled={
+                creating ||
+                !name.trim() ||
+                (accessMode === 'static_password' && !guestPassword)
+              }
               className="rounded-full bg-accent px-4 py-1.5 text-sm font-medium text-on-accent hover:brightness-105 disabled:opacity-40"
             >
               {creating ? t('lobby.creatingRoom') : t('lobby.createRoomConfirm')}
@@ -264,7 +310,7 @@ function RoomCard({
           className="h-full w-full cursor-pointer rounded-md border border-hairline bg-panel p-4.5 text-left transition-colors hover:border-faint hover:bg-panel-2"
         >
           <h2 className="pr-8 font-display text-xl font-semibold">{room.name}</h2>
-          <div className="mt-0.5 flex gap-3 text-[12.5px] text-muted">
+          <div className="mt-0.5 flex flex-wrap gap-3 text-[12.5px] text-muted">
             {np ? (
               np.playing ? (
                 <span className="inline-flex items-center gap-1.5 text-accent">
@@ -278,6 +324,15 @@ function RoomCard({
               <span className="text-faint">{t('lobby.idle')}</span>
             )}
             <span>{t('lobby.listenerCount', { count: room.listener_count })}</span>
+            <span className="text-faint">
+              {t(
+                room.guest_access.mode === 'static_password'
+                  ? 'lobby.accessBadgeStatic'
+                  : room.guest_access.mode === 'rotating_code'
+                    ? 'lobby.accessBadgeRotating'
+                    : 'lobby.accessBadgeOpen',
+              )}
+            </span>
           </div>
 
           <div className="mt-3.5 border-t border-hairline pt-3">

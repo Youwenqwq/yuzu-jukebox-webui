@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { YuzuError } from '../protocol/types';
 import type { Playback, QueueEntry, RadioState } from '../protocol/types';
 import { httpBase } from '../config';
-import { api, client, roomStore, setLastRoom } from '../app/session';
+import { api, client, roomCredentials, roomStore, setLastRoom } from '../app/session';
 import { IDLE_PLAYBACK, audio, renderer } from '../app/player';
 import { syncMediaSession } from '../app/mediasession';
 import { activeLineIndex, parseLrc, type LyricLine } from '../player/lyrics';
@@ -33,8 +33,13 @@ export default function RoomView() {
   const identity = useIdentity();
 
   const [joinError, setJoinError] = useState<YuzuError | null>(null);
-  const [joinPassword, setJoinPassword] = useState('');
-  const [passwordInput, setPasswordInput] = useState('');
+  // Seeded from localStorage so lobby ↔ room hops reuse a working credential.
+  const [joinPassword, setJoinPassword] = useState(
+    () => roomCredentials.get(roomId) ?? '',
+  );
+  const [passwordInput, setPasswordInput] = useState(
+    () => roomCredentials.get(roomId) ?? '',
+  );
   const { show, showError } = useToast();
 
   // 控制权限由服务端按当前 Principal 与 Room grant 计算。加载中或查询失败都保持 false，
@@ -94,23 +99,38 @@ export default function RoomView() {
     return () => document.removeEventListener('click', unlock);
   }, [audio, state.playback.playing]);
 
-  // 进房 / 离房；joinPassword 变化 = 用户提交了房间密码重试
+  // Keep the password field in sync when navigating between rooms.
+  useEffect(() => {
+    const remembered = roomCredentials.get(roomId) ?? '';
+    setPasswordInput(remembered);
+    setJoinPassword(remembered);
+    setJoinError(null);
+  }, [roomId]);
+
+  // 进房 / 离房；joinPassword 变化 = 用户提交了房间凭据重试
   useEffect(() => {
     let cancelled = false;
     roomStore
       .join(roomId, joinPassword || undefined)
       .then(() => {
         if (cancelled) return;
+        roomCredentials.set(roomId, joinPassword);
         setLastRoom({ id: roomId, password: joinPassword || undefined });
         setJoinError(null);
       })
       .catch((err: unknown) => {
-        if (!cancelled) {
-          setJoinError(err instanceof YuzuError ? err : new YuzuError('unknown', String(err)));
+        if (cancelled) return;
+        const error = err instanceof YuzuError ? err : new YuzuError('unknown', String(err));
+        // Invalid or expired room credential: drop the remembered value so the
+        // next visit does not auto-retry a dead code/password.
+        if (error.code === 'forbidden') {
+          roomCredentials.clear(roomId);
         }
+        setJoinError(error);
       });
     return () => {
       cancelled = true;
+      // Only clear reconnect state — remembered credentials survive lobby hops.
       setLastRoom(null);
       void roomStore.leave().catch(() => {});
       renderer.render(IDLE_PLAYBACK);
@@ -177,13 +197,13 @@ export default function RoomView() {
           }}
           className="max-w-sm mx-auto mt-20"
         >
-          <p className="text-muted mb-4">{t('room.needPassword')}</p>
+          <p className="text-muted mb-4">{t('room.needCredential')}</p>
           <input
             type="password"
             autoFocus
             value={passwordInput}
             onChange={(e) => setPasswordInput(e.target.value)}
-            placeholder={t('room.passwordPlaceholder')}
+            placeholder={t('room.credentialPlaceholder')}
             className="w-full bg-panel border border-hairline rounded-md px-4 py-2.5 mb-4 placeholder:text-faint"
           />
           <button type="submit" className="w-full bg-accent text-on-accent rounded-full py-2.5 font-medium">
