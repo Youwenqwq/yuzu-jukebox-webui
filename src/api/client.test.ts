@@ -194,6 +194,63 @@ describe('ApiClient', () => {
     );
   });
 
+  it('normalizes Go nil slices to empty arrays for list endpoints', async () => {
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ playlists: null }))
+      .mockResolvedValueOnce(jsonResponse({ media: null }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          entries: null,
+          downloads: null,
+          history: null,
+          total_bytes: 0,
+          max_bytes: 0,
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          playlist: {
+            id: 'empty',
+            name: 'Empty',
+            description: '',
+            created_by: 'g_alice',
+            created_at: 1,
+            updated_at: 1,
+            track_count: 0,
+          },
+          items: null,
+          offset: 0,
+          limit: 50,
+        }),
+      );
+    const client = new ApiClient(() => 'token', { base: 'https://yuzu.test', fetchFn });
+
+    await expect(client.listPlaylists()).resolves.toEqual([]);
+    await expect(client.listMedia()).resolves.toEqual([]);
+    await expect(client.listCache()).resolves.toEqual({
+      entries: [],
+      downloads: [],
+      history: [],
+      total_bytes: 0,
+      max_bytes: 0,
+    });
+    await expect(client.getPlaylist('empty')).resolves.toEqual({
+      playlist: {
+        id: 'empty',
+        name: 'Empty',
+        description: '',
+        created_by: 'g_alice',
+        created_at: 1,
+        updated_at: 1,
+        track_count: 0,
+      },
+      items: [],
+      offset: 0,
+      limit: 50,
+    });
+  });
+
   it('manages rooms with the server wire format and unwraps history and stats', async () => {
     const room = { id: 'room /一', name: 'Morning' };
     const history = {

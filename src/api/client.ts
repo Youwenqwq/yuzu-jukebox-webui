@@ -26,6 +26,7 @@ import type {
   PlayerCommandResult,
   PlayerInfo,
   PlaylistDetail,
+  PlaylistItem,
   PlaylistInfo,
   ProviderInfo,
   PruneResult,
@@ -56,6 +57,11 @@ interface ErrorBody {
     code?: string;
     message?: string;
   };
+}
+
+/** Go nil slices encode as JSON null; UI always wants a real array. */
+function asList<T>(value: T[] | null | undefined): T[] {
+  return value ?? [];
 }
 
 export class ApiClient {
@@ -114,8 +120,8 @@ export class ApiClient {
   }
 
   async listRooms(): Promise<RoomInfo[]> {
-    const result = await this.#json<{ rooms: RoomInfo[] }>('/api/v1/rooms');
-    return result.rooms;
+    const result = await this.#json<{ rooms: RoomInfo[] | null }>('/api/v1/rooms');
+    return asList(result.rooms);
   }
 
   async createRoom(input: CreateRoomInput): Promise<RoomMutationResult> {
@@ -157,8 +163,8 @@ export class ApiClient {
   }
 
   async listIntegrations(): Promise<IntegrationInfo[]> {
-    const result = await this.#json<{ integrations: IntegrationInfo[] }>('/api/v1/integrations');
-    return result.integrations;
+    const result = await this.#json<{ integrations: IntegrationInfo[] | null }>('/api/v1/integrations');
+    return asList(result.integrations);
   }
 
   async createIntegration(id: string, name: string): Promise<IntegrationCredentialResult> {
@@ -196,10 +202,10 @@ export class ApiClient {
   }
 
   async listIntegrationScopes(integrationId: string): Promise<IntegrationScopeBindingInfo[]> {
-    const result = await this.#json<{ scopes: IntegrationScopeBindingInfo[] }>(
+    const result = await this.#json<{ scopes: IntegrationScopeBindingInfo[] | null }>(
       `/api/v1/integrations/${encodeURIComponent(integrationId)}/scopes`,
     );
-    return result.scopes;
+    return asList(result.scopes);
   }
 
   async bindIntegrationScope(
@@ -230,10 +236,10 @@ export class ApiClient {
   }
 
   async listIntegrationSubjects(integrationId: string): Promise<IntegrationSubjectLinkInfo[]> {
-    const result = await this.#json<{ subjects: IntegrationSubjectLinkInfo[] }>(
+    const result = await this.#json<{ subjects: IntegrationSubjectLinkInfo[] | null }>(
       `/api/v1/integrations/${encodeURIComponent(integrationId)}/subjects`,
     );
-    return result.subjects;
+    return asList(result.subjects);
   }
 
   async linkIntegrationSubject(
@@ -262,7 +268,6 @@ export class ApiClient {
       },
     );
   }
-
   async listPrincipals(query?: string, limit?: number): Promise<PrincipalInfo[]> {
     const params = new URLSearchParams();
     if (query) {
@@ -272,18 +277,19 @@ export class ApiClient {
       params.set('limit', String(limit));
     }
     const suffix = params.size === 0 ? '' : `?${params}`;
-    const result = await this.#json<{ principals: PrincipalInfo[] }>(
+    const result = await this.#json<{ principals: PrincipalInfo[] | null }>(
       `/api/v1/principals${suffix}`,
     );
-    return result.principals;
+    return asList(result.principals);
   }
 
   async listRoomGrants(roomId: string): Promise<RoomControllerGrant[]> {
-    const result = await this.#json<{ grants: RoomControllerGrant[] }>(
+    const result = await this.#json<{ grants: RoomControllerGrant[] | null }>(
       `/api/v1/rooms/${encodeURIComponent(roomId)}/grants`,
     );
-    return result.grants;
+    return asList(result.grants);
   }
+
 
   async grantRoomController(
     roomId: string,
@@ -318,7 +324,6 @@ export class ApiClient {
       },
     );
   }
-
   async roomHistory(id: string, offset?: number, limit?: number): Promise<HistoryEntry[]> {
     const query = new URLSearchParams();
     if (offset !== undefined) {
@@ -328,40 +333,52 @@ export class ApiClient {
       query.set('limit', String(limit));
     }
     const suffix = query.size === 0 ? '' : `?${query}`;
-    const result = await this.#json<{ history: HistoryEntry[] }>(
+    const result = await this.#json<{ history: HistoryEntry[] | null }>(
       `/api/v1/rooms/${encodeURIComponent(id)}/history${suffix}`,
     );
-    return result.history;
+    return asList(result.history);
   }
 
   async roomStats(id: string, limit?: number): Promise<StatsEntry[]> {
     const query = limit === undefined ? '' : `?${new URLSearchParams({ limit: String(limit) })}`;
-    const result = await this.#json<{ stats: StatsEntry[] }>(
+    const result = await this.#json<{ stats: StatsEntry[] | null }>(
       `/api/v1/rooms/${encodeURIComponent(id)}/stats${query}`,
     );
-    return result.stats;
+    return asList(result.stats);
   }
 
   async search(provider: string, q: string): Promise<SearchTrack[]> {
     const query = new URLSearchParams({ provider, q });
-    const result = await this.#json<{ tracks: SearchTrack[] }>(`/api/v1/search?${query}`);
-    return result.tracks;
+    const result = await this.#json<{ tracks: SearchTrack[] | null }>(`/api/v1/search?${query}`);
+    return asList(result.tracks);
   }
 
   async listProviders(): Promise<ProviderInfo[]> {
-    const result = await this.#json<{ providers: ProviderInfo[] }>('/api/v1/providers');
-    return result.providers;
+    const result = await this.#json<{ providers: ProviderInfo[] | null }>('/api/v1/providers');
+    return asList(result.providers);
   }
 
   async listPlaylists(): Promise<PlaylistInfo[]> {
-    const result = await this.#json<{ playlists: PlaylistInfo[] }>('/api/v1/playlists');
-    return result.playlists;
+    const result = await this.#json<{ playlists: PlaylistInfo[] | null }>('/api/v1/playlists');
+    return asList(result.playlists);
   }
 
   async getPlaylist(id: string, offset = 0, limit = 50): Promise<PlaylistDetail> {
     const query = new URLSearchParams({ offset: String(offset), limit: String(limit) });
-    return this.#json<PlaylistDetail>(`/api/v1/playlists/${encodeURIComponent(id)}?${query}`);
+    const result = await this.#json<{
+      playlist: PlaylistInfo;
+      items: PlaylistItem[] | null;
+      offset: number;
+      limit: number;
+    }>(`/api/v1/playlists/${encodeURIComponent(id)}?${query}`);
+    return {
+      playlist: result.playlist,
+      items: asList(result.items),
+      offset: result.offset,
+      limit: result.limit,
+    };
   }
+
 
   async createPlaylist(input: CreatePlaylistInput): Promise<PlaylistInfo> {
     const result = await this.#json<{ playlist: PlaylistInfo }>('/api/v1/playlists', {
@@ -436,12 +453,25 @@ export class ApiClient {
   }
 
   async listCache(): Promise<CacheOverview> {
-    return this.#json<CacheOverview>('/api/v1/media/cache');
+    const result = await this.#json<{
+      entries: CacheOverview['entries'] | null;
+      downloads: CacheOverview['downloads'] | null;
+      history: CacheOverview['history'] | null;
+      total_bytes: number;
+      max_bytes: number;
+    }>('/api/v1/media/cache');
+    return {
+      entries: asList(result.entries),
+      downloads: asList(result.downloads),
+      history: asList(result.history),
+      total_bytes: result.total_bytes,
+      max_bytes: result.max_bytes,
+    };
   }
 
   async listMedia(): Promise<LocalMediaInfo[]> {
-    const result = await this.#json<{ media: LocalMediaInfo[] }>('/api/v1/media');
-    return result.media;
+    const result = await this.#json<{ media: LocalMediaInfo[] | null }>('/api/v1/media');
+    return asList(result.media);
   }
 
   async deleteMedia(trackRef: string): Promise<void> {
@@ -488,8 +518,8 @@ export class ApiClient {
   }
 
   async listPlayers(): Promise<PlayerInfo[]> {
-    const result = await this.#json<{ players: PlayerInfo[] }>('/api/v1/players');
-    return result.players;
+    const result = await this.#json<{ players: PlayerInfo[] | null }>('/api/v1/players');
+    return asList(result.players);
   }
 
   async playerCommand(
@@ -524,10 +554,10 @@ export class ApiClient {
   }
 
   async roomPlayers(roomId: string): Promise<RoomPlayerInfo[]> {
-    const result = await this.#json<{ players: RoomPlayerInfo[] }>(
+    const result = await this.#json<{ players: RoomPlayerInfo[] | null }>(
       `/api/v1/rooms/${encodeURIComponent(roomId)}/players`,
     );
-    return result.players;
+    return asList(result.players);
   }
 
   async bindRoomPlayer(roomId: string, playerId: string): Promise<RoomPlayerInfo> {

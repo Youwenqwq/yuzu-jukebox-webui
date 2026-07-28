@@ -11,6 +11,8 @@ interface YuzuRuntimeConfig {
   favicon?: string;
   accent?: string;
   scheme?: 'dark' | 'light' | '';
+  /** true only when server config.admin_password is non-empty. */
+  admin_password_enabled?: boolean;
 }
 
 declare global {
@@ -49,3 +51,9 @@ export const defaultAccent: string = runtime.accent || '#E3B93C';
 
 /** 配置指定的默认深浅色；'' = 跟随系统（用户本机锁定优先）。 */
 export const configuredScheme: 'dark' | 'light' | '' = runtime.scheme ?? '';
+
+/**
+ * Guest login admin-password field. Must match server `admin_password`:
+ * empty server value disables elevation, so the WebUI hides the input.
+ */
+export const adminPasswordEnabled: boolean = runtime.admin_password_enabled === true;

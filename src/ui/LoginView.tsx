@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { OidcConfig } from '../api/types';
-import { oidcClientId } from '../config';
+import { adminPasswordEnabled, oidcClientId } from '../config';
 import { YuzuError } from '../protocol/types';
 import { api, oidcFlow, session } from '../app/session';
 import { errorKey } from './errors';
@@ -27,7 +27,10 @@ export default function LoginView({ oidcError, onDone }: { oidcError: YuzuError 
     setBusy(true);
     setError(null);
     try {
-      await session.loginGuest(name.trim(), password || undefined);
+      await session.loginGuest(
+        name.trim(),
+        adminPasswordEnabled ? password || undefined : undefined,
+      );
       onDone();
     } catch (err) {
       setError(err instanceof YuzuError ? err : new YuzuError('unknown', String(err)));
@@ -42,10 +45,9 @@ export default function LoginView({ oidcError, onDone }: { oidcError: YuzuError 
     setError(null);
     try {
       await oidcFlow.begin(oidc, {
-        scopes: OIDC_SCOPES,
         clientId: oidcClientId || undefined,
+        scopes: OIDC_SCOPES,
       });
-      // 跳转 IdP，不返回
     } catch (err) {
       setError(err instanceof YuzuError ? err : new YuzuError('unknown', String(err)));
       setBusy(false);
@@ -65,15 +67,19 @@ export default function LoginView({ oidcError, onDone }: { oidcError: YuzuError 
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder={t('login.namePlaceholder')}
-          className="w-full bg-panel border border-hairline rounded-md px-4 py-2.5 mb-3 placeholder:text-faint"
+          className={`w-full bg-panel border border-hairline rounded-md px-4 py-2.5 placeholder:text-faint ${
+            adminPasswordEnabled ? 'mb-3' : 'mb-6'
+          }`}
         />
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder={t('login.passwordPlaceholder')}
-          className="w-full bg-panel border border-hairline rounded-md px-4 py-2.5 mb-6 placeholder:text-faint"
-        />
+        {adminPasswordEnabled && (
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={t('login.passwordPlaceholder')}
+            className="w-full bg-panel border border-hairline rounded-md px-4 py-2.5 mb-6 placeholder:text-faint"
+          />
+        )}
 
         {error && (
           <p className="text-sm text-[#D05A4E] mb-4">{t(errorKey(error), { message: error.message })}</p>

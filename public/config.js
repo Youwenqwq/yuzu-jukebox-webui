@@ -11,12 +11,16 @@
  * favicon: 图标路径（相对应用根或绝对 URL）；留空 = 内置 favicon.svg。
  * accent: 默认主题色。用户在本机的选择优先（localStorage），本项只是新访客的默认。
  * scheme: 默认深浅色 "dark" | "light"；留空 = 跟随系统。用户本机锁定优先。
+ * admin_password_enabled: 是否显示访客登录的管理员口令输入框。
+ *         仅当服务端 config.json 的 admin_password 非空时设为 true；
+ *         公域 / 口令留空时保持 false，避免展示无效字段。
  */
 globalThis.YUZU_CONFIG = {
   server: '',
   oidc_client_id: '',
   title: 'Yuzu Jukebox',
   favicon: '',
-  accent: '#E3B93C',
+  accent: '#6A8FD8',
   scheme: '',
+  admin_password_enabled: false,
 };

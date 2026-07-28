@@ -237,9 +237,6 @@ export default function PlaylistAdmin() {
           </div>
           {detail && (
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => setImportOpen(true)} className={secondaryButtonClass}>
-                {t('admin.playlist.import')}
-              </button>
               <button type="button" onClick={() => setAddOpen(true)} className={primaryButtonClass}>
                 {t('admin.playlist.addTracks')}
               </button>
@@ -368,77 +365,6 @@ export default function PlaylistAdmin() {
             </div>
           </form>
         </Dialog>
-
-        <Dialog open={importOpen} onOpenChange={setImportOpen} title={t('admin.playlist.importDialogTitle')}>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              void importPlaylist();
-            }}
-          >
-            <label className="block text-xs text-muted">{t('admin.playlist.importModeLabel')}</label>
-            <Select
-              value={importMode}
-              onValueChange={setImportMode}
-              options={[
-                { value: 'external', label: t('admin.playlist.importExternal') },
-                { value: 'source', label: t('admin.playlist.importSource') },
-              ]}
-              className="mt-1.5 w-full"
-            />
-            {importMode === 'external' ? (
-              <div className="mt-4 grid gap-4">
-                <label className="text-xs text-muted">
-                  {t('admin.playlist.providerLabel')}
-                  <input
-                    value={importProvider}
-                    onChange={(event) => setImportProvider(event.target.value)}
-                    className={`${inputClass} mt-1.5`}
-                    required
-                  />
-                </label>
-                <label className="text-xs text-muted">
-                  {t('admin.playlist.playlistIdLabel')}
-                  <input
-                    value={importPlaylistId}
-                    onChange={(event) => setImportPlaylistId(event.target.value)}
-                    placeholder={t('admin.playlist.playlistIdPlaceholder')}
-                    className={`${inputClass} mt-1.5`}
-                    required
-                  />
-                </label>
-              </div>
-            ) : (
-              <label className="mt-4 block text-xs text-muted">
-                {t('admin.playlist.sourceLabel')}
-                <input
-                  value={importSource}
-                  onChange={(event) => setImportSource(event.target.value)}
-                  placeholder={t('admin.playlist.sourcePlaceholder')}
-                  className={`${inputClass} mt-1.5`}
-                  required
-                />
-              </label>
-            )}
-            <label className="mt-4 block text-xs text-muted">
-              {t('admin.playlist.importNameLabel')}
-              <input
-                value={importName}
-                onChange={(event) => setImportName(event.target.value)}
-                placeholder={t('admin.playlist.importNamePlaceholder')}
-                className={`${inputClass} mt-1.5`}
-              />
-            </label>
-            <div className="mt-5 flex justify-end gap-2">
-              <button type="button" onClick={() => setImportOpen(false)} className={secondaryButtonClass}>
-                {t('common.cancel')}
-              </button>
-              <button type="submit" disabled={importBusy} className={primaryButtonClass}>
-                {importBusy ? t('admin.common.working') : t('admin.playlist.import')}
-              </button>
-            </div>
-          </form>
-        </Dialog>
       </section>
     );
   }
@@ -450,9 +376,14 @@ export default function PlaylistAdmin() {
           <h2 className="font-display text-2xl font-semibold">{t('admin.playlist.heading')}</h2>
           <p className="mt-1 text-sm text-muted">{t('admin.playlist.intro')}</p>
         </div>
-        <button type="button" onClick={() => setCreateOpen(true)} className={primaryButtonClass}>
-          {t('admin.playlist.new')}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => setImportOpen(true)} className={secondaryButtonClass}>
+            {t('admin.playlist.import')}
+          </button>
+          <button type="button" onClick={() => setCreateOpen(true)} className={primaryButtonClass}>
+            {t('admin.playlist.new')}
+          </button>
+        </div>
       </div>
 
       {playlists === null || (listBusy && playlists.length === 0) ? (
@@ -545,6 +476,77 @@ export default function PlaylistAdmin() {
             </button>
             <button type="submit" disabled={createBusy || !createName.trim()} className={primaryButtonClass}>
               {createBusy ? t('admin.common.working') : t('admin.playlist.create')}
+            </button>
+          </div>
+        </form>
+      </Dialog>
+
+      <Dialog open={importOpen} onOpenChange={setImportOpen} title={t('admin.playlist.importDialogTitle')}>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void importPlaylist();
+          }}
+        >
+          <label className="block text-xs text-muted">{t('admin.playlist.importModeLabel')}</label>
+          <Select
+            value={importMode}
+            onValueChange={setImportMode}
+            options={[
+              { value: 'external', label: t('admin.playlist.importExternal') },
+              { value: 'source', label: t('admin.playlist.importSource') },
+            ]}
+            className="mt-1.5 w-full"
+          />
+          {importMode === 'external' ? (
+            <div className="mt-4 grid gap-4">
+              <label className="text-xs text-muted">
+                {t('admin.playlist.providerLabel')}
+                <input
+                  value={importProvider}
+                  onChange={(event) => setImportProvider(event.target.value)}
+                  className={`${inputClass} mt-1.5`}
+                  required
+                />
+              </label>
+              <label className="text-xs text-muted">
+                {t('admin.playlist.playlistIdLabel')}
+                <input
+                  value={importPlaylistId}
+                  onChange={(event) => setImportPlaylistId(event.target.value)}
+                  placeholder={t('admin.playlist.playlistIdPlaceholder')}
+                  className={`${inputClass} mt-1.5`}
+                  required
+                />
+              </label>
+            </div>
+          ) : (
+            <label className="mt-4 block text-xs text-muted">
+              {t('admin.playlist.sourceLabel')}
+              <input
+                value={importSource}
+                onChange={(event) => setImportSource(event.target.value)}
+                placeholder={t('admin.playlist.sourcePlaceholder')}
+                className={`${inputClass} mt-1.5`}
+                required
+              />
+            </label>
+          )}
+          <label className="mt-4 block text-xs text-muted">
+            {t('admin.playlist.importNameLabel')}
+            <input
+              value={importName}
+              onChange={(event) => setImportName(event.target.value)}
+              placeholder={t('admin.playlist.importNamePlaceholder')}
+              className={`${inputClass} mt-1.5`}
+            />
+          </label>
+          <div className="mt-5 flex justify-end gap-2">
+            <button type="button" onClick={() => setImportOpen(false)} className={secondaryButtonClass}>
+              {t('common.cancel')}
+            </button>
+            <button type="submit" disabled={importBusy} className={primaryButtonClass}>
+              {importBusy ? t('admin.common.working') : t('admin.playlist.import')}
             </button>
           </div>
         </form>

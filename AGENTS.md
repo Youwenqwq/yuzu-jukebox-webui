@@ -13,7 +13,7 @@ src/
   player/      渲染内核：AudioRenderer(<audio> 控制)、DriftCorrector
                (spec §2.2 基线学习状态机)、lyrics.ts(LRC 解析)
   api/         REST 客户端（Bearer、错误码 → YuzuError）
-  auth/        TokenStore(sessionStorage)、OIDC PKCE flow
+  auth/        TokenStore(localStorage 跨标签共享)、OIDC PKCE flow
   app/         组合根单例：session.ts(内核装配/身份/断线恢复)、
                player.ts(全局唯一 <audio>+renderer)、theme.ts(主题)、
                mediasession.ts(系统媒体控制)
@@ -100,7 +100,9 @@ IdP 侧待办：新增 PKCE(User-Agent)应用 → 其 client_id 加入服务端
 WebUI 侧配置：`public/config.js`（运行期，部署后可直接编辑无需重建）——
 `server` 服务端基址（空 = 同源）、`oidc_client_id` PKCE 应用 id（空 = 回退服务端
 oidcConfig 主 id）、`title` 网页标题、`favicon` 图标（空 = 内置 favicon.svg）、
-`accent` 默认主题色、`scheme` 默认深浅色（空 = 跟随系统）。
-优先级：server/oidc 为 config.js > VITE_* > 默认；accent/scheme 为
-用户本机选择（localStorage）> config.js > 内置默认。
+`accent` 默认主题色、`scheme` 默认深浅色（空 = 跟随系统）、
+`admin_password_enabled` 是否显示访客管理员口令框（仅当服务端
+`admin_password` 非空时为 true；公域留空则 false）。
+优先级：server/oidc/admin_password_enabled 为 config.js > VITE_* > 默认；
+accent/scheme 为用户本机选择（localStorage）> config.js > 内置默认。
 redirect_uri 恒为应用根（无路径无 hash），IdP 应用白名单按此登记。
