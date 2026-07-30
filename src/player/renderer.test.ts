@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClockSync } from '../protocol/clock';
 import type { Playback } from '../protocol/types';
 
@@ -8,6 +8,7 @@ import { AudioRenderer } from './renderer';
 
 class FakeAudio {
   src = '';
+  preload = '';
   readyState = 0;
   seeking = false;
   paused = true;
@@ -15,6 +16,8 @@ class FakeAudio {
   playCalls = 0;
   pauseCalls = 0;
   loadCalls = 0;
+  /** 模拟 autoplay 策略拒绝 play() */
+  rejectPlay = false;
   readonly seekWrites: number[] = [];
 
   private position = 0;
@@ -31,6 +34,9 @@ class FakeAudio {
 
   play(): Promise<void> {
     this.playCalls += 1;
+    if (this.rejectPlay) {
+      return Promise.reject(new Error('NotAllowedError'));
+    }
     this.paused = false;
     return Promise.resolve();
   }
@@ -174,6 +180,31 @@ describe('AudioRenderer', () => {
     expect(audio.loadCalls).toBe(1);
   });
 
+  it('keeps loaded media when the same track receives a fresh stream ticket', () => {
+    const audio = new FakeAudio();
+    const renderer = makeRenderer(audio, new FakeClock(1_000));
+
+    renderer.render(makePlayback({
+      streamUrl: '/stream/v1/local:one?ticket=one',
+    }));
+    expect(audio.src).toBe(
+      'https://jukebox.example/stream/v1/local:one?ticket=one',
+    );
+    expect(audio.loadCalls).toBe(1);
+    expect(audio.playCalls).toBe(1);
+
+    renderer.render(makePlayback({
+      streamUrl: '/stream/v1/local:one?ticket=two',
+      positionMs: 12_000,
+      updatedAt: 2_000,
+    }));
+    expect(audio.src).toBe(
+      'https://jukebox.example/stream/v1/local:one?ticket=one',
+    );
+    expect(audio.loadCalls).toBe(1);
+    expect(audio.playCalls).toBe(1);
+  });
+
   it('pauses, clears the source, and cancels a pending metadata seek when current becomes null', () => {
     const audio = new FakeAudio();
     const renderer = makeRenderer(audio, new FakeClock(1_000));
@@ -260,5 +291,148 @@ describe('AudioRenderer', () => {
     renderer.render(playback);
     expect(audio.loadCalls).toBe(loadCalls + 1);
     expect(audio.src).toBe(source);
+  });
+});
+
+describe('AudioRenderer start-lead window', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('loads and stays paused, then plays at the scheduled instant', () => {
+    const audio = new FakeAudio();
+    audio.readyState = 4;
+    const clock = new FakeClock(1_100);
+    const renderer = makeRenderer(audio, clock);
+
+    // position -600 @ updated_at 1000：预定起播在服务端时刻 1600，此刻还差 500ms。
+    renderer.render(makePlayback({ positionMs: -600, updatedAt: 1_000 }));
+
+    expect(audio.src).toBe(
+      'https://jukebox.example/stream/v1/local:one?ticket=one',
+    );
+    expect(audio.loadCalls).toBe(1);
+    expect(audio.playCalls).toBe(0);
+    expect(audio.paused).toBe(true);
+    expect(audio.seekWrites).toEqual([]);
+
+    // 窗口内的周期校偏不得 seek（更不得 seek 到负位置）。
+    audio.currentTime = 0;
+    audio.seekWrites.length = 0;
+    clock.now = 1_300;
+    renderer.tick();
+    expect(audio.seekWrites).toEqual([]);
+    expect(audio.playCalls).toBe(0);
+
+    clock.now = 1_600;
+    vi.advanceTimersByTime(500);
+    expect(audio.playCalls).toBe(1);
+    expect(audio.paused).toBe(false);
+    expect(audio.seekWrites).toEqual([]);
+  });
+
+  it('cancels a scheduled start when a newer playback arrives', () => {
+    const audio = new FakeAudio();
+    audio.readyState = 4;
+    const clock = new FakeClock(1_000);
+    const renderer = makeRenderer(audio, clock);
+
+    renderer.render(makePlayback({ positionMs: -600, updatedAt: 1_000 }));
+    // 连切：第二条 playback.changed 必须让第一条的定时器失效，否则叠加乱播。
+    renderer.render(makePlayback({
+      trackRef: 'local:two',
+      streamUrl: '/stream/v1/local:two?ticket=two',
+      positionMs: -600,
+      updatedAt: 1_000,
+    }));
+
+    clock.now = 1_600;
+    vi.advanceTimersByTime(5_000);
+    expect(audio.playCalls).toBe(1);
+    expect(audio.src).toBe(
+      'https://jukebox.example/stream/v1/local:two?ticket=two',
+    );
+  });
+
+  it('cancels a scheduled start when playback goes idle', () => {
+    const audio = new FakeAudio();
+    const renderer = makeRenderer(audio, new FakeClock(1_000));
+
+    renderer.render(makePlayback({ positionMs: -600, updatedAt: 1_000 }));
+    renderer.render(makePlayback({ trackRef: null, playing: false }));
+
+    vi.advanceTimersByTime(5_000);
+    expect(audio.playCalls).toBe(0);
+    expect(audio.src).toBe('');
+  });
+
+  it('schedules nothing while paused inside the window and reschedules on resume', () => {
+    const audio = new FakeAudio();
+    const clock = new FakeClock(1_000);
+    const renderer = makeRenderer(audio, clock);
+
+    renderer.render(makePlayback({ positionMs: -600, updatedAt: 1_000, playing: false }));
+    vi.advanceTimersByTime(5_000);
+    expect(audio.playCalls).toBe(0);
+
+    // resume 时服务端刷新 updated_at，窗口重新计时。
+    clock.now = 5_000;
+    renderer.render(makePlayback({ positionMs: -600, updatedAt: 5_000 }));
+    expect(audio.playCalls).toBe(0);
+    clock.now = 5_600;
+    vi.advanceTimersByTime(600);
+    expect(audio.playCalls).toBe(1);
+  });
+
+  it('aligns before playing when the scheduled start is throttled late', () => {
+    const audio = new FakeAudio();
+    audio.readyState = 4;
+    const clock = new FakeClock(1_000);
+    const renderer = makeRenderer(audio, clock);
+
+    renderer.render(makePlayback({ positionMs: -600, updatedAt: 1_000 }));
+
+    // 后台标签页节流：定时器迟到 400ms。从 0 开声会被误学成基线，先对齐。
+    clock.now = 2_000;
+    vi.advanceTimersByTime(1_000);
+    expect(audio.seekWrites).toEqual([0.4]);
+    expect(audio.playCalls).toBe(1);
+  });
+
+  it('keeps a gesture retry silent inside the window', () => {
+    const audio = new FakeAudio();
+    const clock = new FakeClock(1_100);
+    const renderer = makeRenderer(audio, clock);
+
+    renderer.render(makePlayback({ positionMs: -600, updatedAt: 1_000 }));
+    renderer.resumeAfterGesture();
+    expect(audio.playCalls).toBe(0);
+
+    clock.now = 1_600;
+    vi.advanceTimersByTime(500);
+    expect(audio.playCalls).toBe(1);
+  });
+
+  it('retries a rejected play on the next gesture after the window', () => {
+    const audio = new FakeAudio();
+    audio.readyState = 4;
+    audio.rejectPlay = true;
+    const clock = new FakeClock(1_000);
+    const renderer = makeRenderer(audio, clock);
+
+    renderer.render(makePlayback({ positionMs: -600, updatedAt: 1_000 }));
+    clock.now = 1_600;
+    vi.advanceTimersByTime(600);
+    expect(audio.playCalls).toBe(1);
+    expect(audio.paused).toBe(true);
+
+    audio.rejectPlay = false;
+    renderer.resumeAfterGesture();
+    expect(audio.playCalls).toBe(2);
+    expect(audio.paused).toBe(false);
   });
 });
