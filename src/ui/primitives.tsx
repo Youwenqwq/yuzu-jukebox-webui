@@ -53,18 +53,25 @@ export function ConfirmDialog(props: {
   );
 }
 
-/** 通用 Dialog 容器（表单类弹窗用）：标题 + 任意 children + 底部按钮区 */
+/**
+ * 通用 Dialog 容器（表单类弹窗用）：标题 + 任意 children + 底部按钮区。
+ * size 可选：默认 440px；'wide' 给字段较多的配置表单（三列数字网格在 440px 下会挤成一团）。
+ */
 export function Dialog(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
+  size?: 'default' | 'wide';
   children: ReactNode;
 }) {
+  const width = props.size === 'wide' ? 'w-[min(94vw,720px)]' : 'w-[min(92vw,440px)]';
   return (
     <DialogPrimitive.Root open={props.open} onOpenChange={props.onOpenChange}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-black/60" />
-        <DialogPrimitive.Content className="pop-enter fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(92vw,440px)] max-h-[85vh] overflow-y-auto bg-panel-2 border border-hairline rounded-lg p-6">
+        <DialogPrimitive.Content
+          className={`pop-enter fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 ${width} max-h-[85vh] overflow-y-auto bg-panel-2 border border-hairline rounded-lg p-6`}
+        >
           <DialogPrimitive.Title className="font-display text-lg font-semibold mb-4">
             {props.title}
           </DialogPrimitive.Title>

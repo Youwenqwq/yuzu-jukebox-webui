@@ -2,13 +2,13 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import IntegrationAdmin from './admin/IntegrationAdmin';
 import MediaAdmin from './admin/MediaAdmin';
+import AccelerationAdmin from './admin/AccelerationAdmin';
 import PlayerAdmin from './admin/PlayerAdmin';
 import PlaylistAdmin from './admin/PlaylistAdmin';
 import { useIdentity } from './hooks';
 import { TabPanel, Tabs } from './primitives';
-
 /**
- * 全局管理视图：歌单 / 媒体 / 外部集成 / 播放端。
+ * 全局管理视图：歌单 / 媒体 / 加速资源 / 外部集成 / 播放端。
  * 房间内管理（电台/策略/历史）在 RoomView 就地；全局入口按当前身份角色收敛。
  */
 export default function AdminView() {
@@ -22,6 +22,7 @@ export default function AdminView() {
       ? [
           { value: 'playlists', label: t('admin.tabPlaylists') },
           { value: 'media', label: t('admin.tabMedia') },
+          { value: 'accelerations', label: t('admin.tabAccelerations') },
         ]
       : []),
     ...(canManageRooms
@@ -62,6 +63,11 @@ export default function AdminView() {
           {canManageMedia && (
             <TabPanel value="media">
               <MediaAdmin />
+            </TabPanel>
+          )}
+          {canManageMedia && (
+            <TabPanel value="accelerations">
+              <AccelerationAdmin />
             </TabPanel>
           )}
           {canManageRooms && (
