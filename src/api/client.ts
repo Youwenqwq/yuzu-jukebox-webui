@@ -3,6 +3,16 @@ import type { AuthOk } from '../protocol/types';
 import { YuzuError } from '../protocol/types';
 import type {
   AddPlaylistItemsResult,
+  AccelerationCredentialActivationResult,
+  AccelerationCredentialResult,
+  AccelerationInfo,
+  AccelerationInventoryScan,
+  AccelerationInventoryStatus,
+  AccelerationRequestsResult,
+  AccelerationStatus,
+  DistributionRequest,
+  CreateAccelerationInput,
+  UpdateAccelerationInput,
   CacheOverview,
   CreatePlaylistInput,
   CreatePlayerInput,
@@ -581,6 +591,121 @@ export class ApiClient {
         method: 'POST',
         body: JSON.stringify({ op, value }),
       },
+    );
+  }
+
+  async listAccelerations(): Promise<AccelerationInfo[]> {
+    const result = await this.#json<{ accelerations: AccelerationInfo[] | null }>('/api/v1/accelerations');
+    return asList(result.accelerations);
+  }
+
+  async getAcceleration(id: string): Promise<AccelerationInfo> {
+    const result = await this.#json<{ acceleration: AccelerationInfo }>(
+      `/api/v1/accelerations/${encodeURIComponent(id)}`,
+    );
+    return result.acceleration;
+  }
+
+  async createAcceleration(input: CreateAccelerationInput): Promise<{
+    acceleration: AccelerationInfo;
+    credentials: {
+      publisher_token: string;
+      delivery_token: string;
+      backend_token: string;
+    };
+  }> {
+    return this.#json('/api/v1/accelerations', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  async updateAcceleration(id: string, patch: UpdateAccelerationInput): Promise<AccelerationInfo> {
+    const result = await this.#json<{ acceleration: AccelerationInfo }>(
+      `/api/v1/accelerations/${encodeURIComponent(id)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
+      },
+    );
+    return result.acceleration;
+  }
+
+  async deleteAcceleration(id: string): Promise<void> {
+    await this.#json<{ ok: true }>(`/api/v1/accelerations/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async accelerationStatus(id: string): Promise<AccelerationStatus> {
+    return this.#json<AccelerationStatus>(
+      `/api/v1/accelerations/${encodeURIComponent(id)}/status`,
+    );
+  }
+  async accelerationRequest(
+    id: string,
+    trackRef: string,
+  ): Promise<{ request: DistributionRequest }> {
+    return this.#json<{ request: DistributionRequest }>(
+      `/api/v1/accelerations/${encodeURIComponent(id)}/requests/${encodeURIComponent(trackRef)}`,
+    );
+  }
+
+  async cancelAccelerationRequest(
+    id: string,
+    trackRef: string,
+  ): Promise<{ request: DistributionRequest }> {
+    return this.#json<{ request: DistributionRequest }>(
+      `/api/v1/accelerations/${encodeURIComponent(id)}/requests/${encodeURIComponent(trackRef)}`,
+      { method: 'DELETE' },
+    );
+  }
+
+  async refreshAccelerationInventory(
+    id: string,
+  ): Promise<{ scan: AccelerationInventoryScan }> {
+    return this.#json<{ scan: AccelerationInventoryScan }>(
+      `/api/v1/accelerations/${encodeURIComponent(id)}/inventory/refresh`,
+      { method: 'POST' },
+    );
+  }
+
+  async accelerationInventoryStatus(id: string): Promise<AccelerationInventoryStatus> {
+    return this.#json<AccelerationInventoryStatus>(
+      `/api/v1/accelerations/${encodeURIComponent(id)}/inventory/status`,
+    );
+  }
+
+
+  async accelerationRequests(
+    id: string,
+    state?: string,
+    limit = 50,
+  ): Promise<AccelerationRequestsResult> {
+    const query = new URLSearchParams({ limit: String(limit) });
+    if (state) query.set('state', state);
+    return this.#json<AccelerationRequestsResult>(
+      `/api/v1/accelerations/${encodeURIComponent(id)}/requests?${query.toString()}`,
+    );
+  }
+
+  async prepareAccelerationCredential(
+    id: string,
+    purpose: 'publisher' | 'delivery' | 'backend',
+  ): Promise<AccelerationCredentialResult> {
+    return this.#json<AccelerationCredentialResult>(
+      `/api/v1/accelerations/${encodeURIComponent(id)}/credentials/${purpose}/prepare`,
+      { method: 'POST' },
+    );
+  }
+
+  async activateAccelerationCredential(
+    id: string,
+    purpose: 'publisher' | 'delivery' | 'backend',
+  ): Promise<AccelerationCredentialActivationResult> {
+    return this.#json<AccelerationCredentialActivationResult>(
+      `/api/v1/accelerations/${encodeURIComponent(id)}/credentials/${purpose}/activate`,
+      { method: 'POST' },
     );
   }
 

@@ -811,4 +811,167 @@ describe('ApiClient', () => {
     expect(fetchFn.mock.calls[2][1]?.method).toBe('POST');
     expect(fetchFn.mock.calls[3][1]?.method).toBe('DELETE');
   });
+  it('manages acceleration resources, credentials, status, and requests', async () => {
+    const acceleration = {
+      id: 'edgeone / main',
+      name: 'EdgeOne',
+      kind: 'edgeone',
+      enabled: false,
+      publish_on_cache_ready: true,
+      control_base_url: 'https://edge.test/control',
+      backend_base_url: 'https://edge.test/backend',
+      lease_ttl_seconds: 600,
+      upload_rate_bytes_per_second: 187500,
+      max_object_bytes: 23 * 1024 * 1024,
+      storage_budget_bytes: 850 * 1024 * 1024,
+      storage_high_watermark_percent: 95,
+      storage_low_watermark_percent: 85,
+      inventory_interval_seconds: 900,
+      inventory_stale_after_seconds: 1800,
+      publisher_credential_configured: true,
+      delivery_credential_configured: true,
+      backend_credential_configured: true,
+      publisher_credential_pending: false,
+      delivery_credential_pending: false,
+      backend_credential_pending: false,
+      control_healthy: true,
+      backend_healthy: true,
+      created_at: 100,
+      updated_at: 200,
+    };
+    const status = {
+      acceleration,
+      summary: { requested: 4, queued: 1, leased: 1, retry_wait: 0, cancel_requested: 0, ready: 2, canceled: 0 },
+      inventory_scan: null,
+      storage: {
+        managed: true,
+        budget_bytes: 850 * 1024 * 1024,
+        high_watermark_percent: 95,
+        low_watermark_percent: 85,
+        accounted_bytes: 100,
+        reserved_bytes: 20,
+        observed_bytes: 110,
+        object_count: 2,
+        observed_object_count: 2,
+        orphan_count: 0,
+        missing_count: 0,
+        pending_deletion_count: 0,
+        pressure: 'normal',
+      },
+      publishers: [],
+      active: [],
+      counters: { requests: 4 },
+      last_24_hours: { requests: 2 },
+    };
+    const request = {
+      acceleration_id: acceleration.id,
+      track_ref: 'ncm:42',
+      state: 'ready',
+      requested_at: 100,
+      updated_at: 200,
+      next_attempt_at: 0,
+      attempts: 1,
+    };
+    const scan = {
+      id: 'inv-1',
+      acceleration_id: acceleration.id,
+      state: 'queued',
+      attempts: 1,
+      requested_at: 100,
+      updated_at: 200,
+    };
+    const canceledRequest = { ...request, state: 'canceled' };
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ accelerations: [acceleration] }))
+      .mockResolvedValueOnce(jsonResponse({ acceleration }))
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            acceleration,
+            credentials: {
+              publisher_token: 'publisher-token',
+              delivery_token: 'delivery-token',
+              backend_token: 'backend-token',
+            },
+          },
+          201,
+        ),
+      )
+      .mockResolvedValueOnce(jsonResponse({ acceleration: { ...acceleration, name: 'Renamed' } }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }))
+      .mockResolvedValueOnce(jsonResponse(status))
+      .mockResolvedValueOnce(jsonResponse({ requests: [request] }))
+      .mockResolvedValueOnce(jsonResponse({ request }))
+      .mockResolvedValueOnce(jsonResponse({ request: canceledRequest }))
+      .mockResolvedValueOnce(jsonResponse({ scan }, 202))
+      .mockResolvedValueOnce(jsonResponse({ storage: status.storage, scan }))
+      .mockResolvedValueOnce(jsonResponse({ acceleration, token: 'pending-token' }))
+      .mockResolvedValueOnce(jsonResponse({ acceleration }));
+    const client = new ApiClient(() => 'admin-token', {
+      base: 'https://yuzu.test',
+      fetchFn,
+    });
+
+    await expect(client.listAccelerations()).resolves.toEqual([acceleration]);
+    await expect(client.getAcceleration(acceleration.id)).resolves.toEqual(acceleration);
+    await expect(
+      client.createAcceleration({
+        id: acceleration.id,
+        name: acceleration.name,
+        control_base_url: acceleration.control_base_url,
+        backend_base_url: acceleration.backend_base_url,
+      }),
+    ).resolves.toMatchObject({ acceleration, credentials: expect.any(Object) });
+    await expect(client.updateAcceleration(acceleration.id, { name: 'Renamed' })).resolves.toEqual({
+      ...acceleration,
+      name: 'Renamed',
+    });
+    await expect(client.deleteAcceleration(acceleration.id)).resolves.toBeUndefined();
+    await expect(client.accelerationStatus(acceleration.id)).resolves.toEqual(status);
+    await expect(client.accelerationRequests(acceleration.id, 'ready', 7)).resolves.toEqual({
+      requests: [request],
+    });
+    await expect(client.accelerationRequest(acceleration.id, request.track_ref)).resolves.toEqual({ request });
+    await expect(client.cancelAccelerationRequest(acceleration.id, request.track_ref)).resolves.toEqual({
+      request: canceledRequest,
+    });
+    await expect(client.refreshAccelerationInventory(acceleration.id)).resolves.toEqual({ scan });
+    await expect(client.accelerationInventoryStatus(acceleration.id)).resolves.toEqual({
+      storage: status.storage,
+      scan,
+    });
+    await expect(client.prepareAccelerationCredential(acceleration.id, 'publisher')).resolves.toEqual({
+      acceleration,
+      token: 'pending-token',
+    });
+    await expect(client.activateAccelerationCredential(acceleration.id, 'publisher')).resolves.toEqual({
+      acceleration,
+    });
+
+    const encodedId = 'edgeone%20%2F%20main';
+    expect(fetchFn.mock.calls.map(([url]) => url)).toEqual([
+      'https://yuzu.test/api/v1/accelerations',
+      `https://yuzu.test/api/v1/accelerations/${encodedId}`,
+      'https://yuzu.test/api/v1/accelerations',
+      `https://yuzu.test/api/v1/accelerations/${encodedId}`,
+      `https://yuzu.test/api/v1/accelerations/${encodedId}`,
+      `https://yuzu.test/api/v1/accelerations/${encodedId}/status`,
+      `https://yuzu.test/api/v1/accelerations/${encodedId}/requests?limit=7&state=ready`,
+      `https://yuzu.test/api/v1/accelerations/${encodedId}/requests/ncm%3A42`,
+      `https://yuzu.test/api/v1/accelerations/${encodedId}/requests/ncm%3A42`,
+      `https://yuzu.test/api/v1/accelerations/${encodedId}/inventory/refresh`,
+      `https://yuzu.test/api/v1/accelerations/${encodedId}/inventory/status`,
+      `https://yuzu.test/api/v1/accelerations/${encodedId}/credentials/publisher/prepare`,
+      `https://yuzu.test/api/v1/accelerations/${encodedId}/credentials/publisher/activate`,
+    ]);
+    expect(fetchFn.mock.calls[2][1]?.method).toBe('POST');
+    expect(fetchFn.mock.calls[2][1]?.body).toContain('control_base_url');
+    expect(fetchFn.mock.calls[3][1]?.method).toBe('PATCH');
+    expect(fetchFn.mock.calls[4][1]?.method).toBe('DELETE');
+    expect(fetchFn.mock.calls[8][1]?.method).toBe('DELETE');
+    expect(fetchFn.mock.calls[9][1]?.method).toBe('POST');
+    expect(fetchFn.mock.calls[11][1]?.method).toBe('POST');
+    expect(fetchFn.mock.calls[12][1]?.method).toBe('POST');
+  });
 });
