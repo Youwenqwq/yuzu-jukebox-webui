@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { HistoryEntry, RoomAccessCode, RoomAccessMode, StatsEntry } from '../api/types';
+import type { HistoryEntry, RoomAccessCode, RoomAccessMode, RoomPolicy, StatsEntry } from '../api/types';
+import { mergeRoomPolicy } from '../api/policy';
 import { api, roomStore } from '../app/session';
 import type { RadioState } from '../protocol/types';
 import { formatDateTime } from './format';
@@ -75,11 +76,18 @@ export function RoomAdminPanel({
   const [maxQueue, setMaxQueue] = useState('0');
   const [queueLimits, setQueueLimits] = useState<QueueLimitRow[]>([]);
   const [memberPlayerVolume, setMemberPlayerVolume] = useState(false);
+  /**
+   * 保存策略时的合并基底：本次打开面板时从服务端读到的完整 policy。
+   * SetPolicy 是整体替换，基底不能来自可能过期的本地快照（房间快照里没有 policy），
+   * 也不能省略——面板不认识的键（start_lead_ms 等）靠它原样回传。
+   */
+  const [policyBase, setPolicyBase] = useState<RoomPolicy | null>(null);
   const [policySaving, setPolicySaving] = useState(false);
 
   const [accessMode, setAccessMode] = useState<RoomAccessMode>('open');
   const [accessPassword, setAccessPassword] = useState('');
   const [codePeriodHours, setCodePeriodHours] = useState('24');
+  const [trustedRoles, setTrustedRoles] = useState('');
   const [accessSaving, setAccessSaving] = useState(false);
   const [accessCode, setAccessCode] = useState<RoomAccessCode | null>(null);
   const [accessCodeLoading, setAccessCodeLoading] = useState(false);
@@ -107,6 +115,7 @@ export function RoomAdminPanel({
     setLoadFailed(false);
     setHistory(null);
     setStats(null);
+    setPolicyBase(null);
     setPrincipalNames(new Map());
 
     Promise.all([
@@ -149,6 +158,7 @@ export function RoomAdminPanel({
           }
         }
         if (cancelled) return;
+        setPolicyBase(room.policy ?? {});
         setMaxQueue(String(room.policy.max_queue ?? 0));
         setQueueLimits(
           Object.entries(room.policy.queue_limits ?? {})
@@ -158,6 +168,7 @@ export function RoomAdminPanel({
         setMemberPlayerVolume(room.policy.member_player_volume ?? false);
         setAccessMode(room.guest_access?.mode ?? 'open');
         setAccessPassword('');
+        setTrustedRoles((room.guest_access?.trusted_roles ?? []).join(', '));
         setCodePeriodHours(
           String(
             Math.max(
@@ -225,6 +236,10 @@ export function RoomAdminPanel({
           accessMode === 'static_password' ? accessPassword : undefined,
         guest_code_period_seconds:
           accessMode === 'rotating_code' ? periodHours * 3600 : undefined,
+        trusted_roles: trustedRoles
+          .split(',')
+          .map((role) => role.trim())
+          .filter(Boolean),
       });
       if (result.guest_access) {
         setAccessMode(result.guest_access.mode);
@@ -236,6 +251,7 @@ export function RoomAdminPanel({
             ),
           ),
         );
+        setTrustedRoles((result.guest_access.trusted_roles ?? []).join(', '));
       }
       setAccessPassword('');
       setAccessCode(null);
@@ -431,21 +447,27 @@ export function RoomAdminPanel({
                   className="mt-3"
                   onSubmit={(event) => {
                     event.preventDefault();
-                    if (policySaving) return;
+                    if (policySaving || policyBase === null) return;
                     const limits: Record<string, number> = {};
                     for (const row of queueLimits) {
                       limits[row.role] = Math.max(0, Math.floor(Number(row.value) || 0));
                     }
+                    // policy 是整体替换：以服务端基底合并，只写表单拥有的键，
+                    // 面板不认识的字段（start_lead_ms 等）原样回传（见 api/policy.ts）。
+                    const policy = mergeRoomPolicy(policyBase, {
+                      max_queue: Math.max(0, Math.floor(Number(maxQueue) || 0)),
+                      member_player_volume: memberPlayerVolume,
+                      queue_limits: limits,
+                      editable_queue_limit_roles: QUEUE_LIMIT_ROLES,
+                    });
                     setPolicySaving(true);
                     void api
-                      .updateRoom(roomId, {
-                        policy: {
-                          max_queue: Math.max(0, Math.floor(Number(maxQueue) || 0)),
-                          queue_limits: limits,
-                          member_player_volume: memberPlayerVolume,
-                        },
+                      .updateRoom(roomId, { policy })
+                      .then(() => {
+                        // 保存成功后基底就是刚提交的这份，后续再保存不会退回旧值。
+                        setPolicyBase(policy);
+                        show(t('roomAdmin.policySaved'));
                       })
-                      .then(() => show(t('roomAdmin.policySaved')))
                       .catch(showError)
                       .finally(() => setPolicySaving(false));
                   }}
@@ -557,7 +579,7 @@ export function RoomAdminPanel({
 
                   <button
                     type="submit"
-                    disabled={policySaving}
+                    disabled={policySaving || policyBase === null}
                     className="mt-4 rounded-full bg-accent px-4 py-1.5 text-[13px] font-medium text-on-accent hover:brightness-105 disabled:opacity-40"
                   >
                     {policySaving ? t('roomAdmin.policySaving') : t('roomAdmin.policySave')}
@@ -642,6 +664,18 @@ export function RoomAdminPanel({
                       </span>
                     </label>
                   )}
+                  <label className="mt-3 block text-xs text-muted">
+                    {t('roomAdmin.trustedRoles')}
+                    <input
+                      value={trustedRoles}
+                      onChange={(event) => setTrustedRoles(event.target.value)}
+                      placeholder={t('roomAdmin.trustedRolesPlaceholder')}
+                      className="mt-1.5 w-full rounded-md border border-hairline bg-panel px-3 py-2 text-[13px] placeholder:text-faint"
+                    />
+                    <span className="mt-1 block text-[11px] text-faint">
+                      {t('roomAdmin.trustedRolesHint')}
+                    </span>
+                  </label>
 
                   <div className="mt-4 flex flex-wrap items-center gap-2">
                     <button

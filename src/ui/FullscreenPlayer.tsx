@@ -46,6 +46,7 @@ export function FullscreenPlayer(props: {
     };
   }, [onClose]);
 
+  // 起播提前量窗口内推算值为负（本曲还没开始）：钳到 0 再拿去渲染进度条/时间/歌词。
   const pos = Math.max(
     0,
     Math.min(

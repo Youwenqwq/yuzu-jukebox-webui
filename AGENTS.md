@@ -26,6 +26,20 @@ src/
 
 - **服务端是唯一权威状态源**；UI 是渲染器。播放位置永远由五元组
   `position_ms + updated_at + playing + rate` + 校时 offset 推算，不存在本地进度状态。
+- **`position_ms` 可以为负**（切歌起播提前量，房间 policy `start_lead_ms`，默认 600ms）：
+  `should_be < 0` = 本曲还有 `|should_be|` ms 才开播，此时 `playing` 已经是 true——
+  **判断是否该出声只看 should_be 的正负，不看 `playing`**。AudioRenderer 在窗口内装载并
+  停在 0 待命、用 setTimeout 到点 play()（新状态/离房一律 cancel），DriftCorrector 在窗口内
+  既不 seek 也不学基线；所有渲染点（进度条/时间文本/歌词/大厅 now_playing）钳到 0。
+- **对齐是纯 seek，不调速**（spec §2.2/§9.2，与 yuzu-agent 一致）：`|偏差| > 150ms` →
+  seek 到 `should_be + drift_baseline`（基线随即作废重学），`≤ 150ms` 不动。
+  变速会改变音高与听感，代价高于一次跳转——`playbackRate` 不参与同步，
+  `PlayerIntent` 只有 seek 一种。
+- **房间 policy 是整体替换**：`PATCH /rooms/{id}` 的 `policy` 覆盖整块
+  `rooms.policy_json`，而 WebUI 只认识其中一个子集。保存必须以本次从服务端读到的
+  policy 为基底、只写表单拥有的键（`api/policy.ts` 的 `mergeRoomPolicy`）——
+  曾经的 bug：RoomAdminPanel 重建整个对象提交，管理员点一次保存就把 `start_lead_ms`
+  抹回缺省。新增服务端 policy 字段不需要动 UI。
 - **组合根单例**：`<audio>`、AudioRenderer、YuzuClient、SessionStore 全在 `app/`
   持有。曾发生过的 bug：RoomView 每次挂载新建 audio → 离房后旧实例继续发声、
   重进房双重播放。**任何视图不得自建内核实例**。

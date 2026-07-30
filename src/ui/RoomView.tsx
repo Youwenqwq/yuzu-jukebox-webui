@@ -5,7 +5,7 @@ import { YuzuError } from '../protocol/types';
 import type { Playback, QueueEntry, RadioState } from '../protocol/types';
 import { httpBase } from '../config';
 import { api, client, roomCredentials, roomStore, setLastRoom } from '../app/session';
-import { IDLE_PLAYBACK, audio, renderer } from '../app/player';
+import { IDLE_PLAYBACK, renderer } from '../app/player';
 import { syncMediaSession } from '../app/mediasession';
 import { activeLineIndex, parseLrc, type LyricLine } from '../player/lyrics';
 import { useConnStatus, useIdentity, useRoomState } from './hooks';
@@ -18,7 +18,10 @@ import { RoomAdminPanel } from './RoomAdminPanel';
 import { FullscreenPlayer } from './FullscreenPlayer';
 import { VolumeControl } from './VolumeControl';
 
-/** 由五元组 + 校时时钟推算"此刻应该放到哪"（spec §2.2） */
+/**
+ * 由五元组 + 校时时钟推算"此刻应该放到哪"（spec §2.2）。
+ * 结果可能为负——切歌起播提前量窗口内本曲还没开始；渲染前必须钳到 0。
+ */
 function shouldBe(pb: Playback): number {
   if (!pb.playing) return pb.position_ms;
   return pb.position_ms + (client.clock.serverNow() - pb.updated_at) * pb.rate;
@@ -88,16 +91,13 @@ export default function RoomView() {
     return () => clearInterval(id);
   }, [renderer]);
 
-  // 浏览器自动播放限制：首次手势时补一次 play
+  // 浏览器自动播放限制：首次手势时补一次 play。
+  // 判断交给渲染内核——起播提前量窗口内它只保定时器，不提前出声。
   useEffect(() => {
-    const unlock = () => {
-      if (state.playback.playing && audio.paused && audio.src) {
-        void audio.play().catch(() => {});
-      }
-    };
+    const unlock = () => renderer.resumeAfterGesture();
     document.addEventListener('click', unlock);
     return () => document.removeEventListener('click', unlock);
-  }, [audio, state.playback.playing]);
+  }, []);
 
   // Keep the password field in sync when navigating between rooms.
   useEffect(() => {
@@ -291,6 +291,8 @@ function Stage({
   // 小预览开关；歌词数据由 RoomView 持有（与全屏播放页共享）
   const [lyricsOpen, setLyricsOpen] = useState(false);
 
+  // Math.max(0, …) 不是防御性写法：起播提前量窗口内 shouldBe 为负，
+  // 少了它进度条会反向溢出、时间文本出现负值、歌词跳到首行之前。
   const pos = current ? Math.max(0, Math.min(shouldBe(playback), current.duration_ms)) : 0;
   const pct = current && current.duration_ms > 0 ? (pos / current.duration_ms) * 100 : 0;
 
@@ -482,9 +484,20 @@ function QueuePanel({
     <div className="bg-panel border border-hairline rounded-lg">
       <header className="flex items-baseline justify-between px-4.5 py-3.5 border-b border-hairline">
         <span className="font-mono text-[11px] tracking-[0.14em] text-faint">{t('room.queueTitle')}</span>
-        <span className="font-mono text-xs text-muted tabular-nums">
-          {t('room.queueCount', { count: queue.length })}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-xs text-muted tabular-nums">
+            {t('room.queueCount', { count: queue.length })}
+          </span>
+          {canControl && (
+            <button
+              type="button"
+              onClick={() => void roomStore.clearQueue().catch(onError)}
+              className="text-xs text-muted hover:text-paper"
+            >
+              {t('room.clearQueue')}
+            </button>
+          )}
+        </div>
       </header>
 
       <div className="px-4.5 py-3 border-b border-hairline">

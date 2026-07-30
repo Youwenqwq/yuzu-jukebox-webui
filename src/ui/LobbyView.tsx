@@ -136,6 +136,7 @@ function CreateRoomCard({ onCreated }: { onCreated: () => void }) {
   const [accessMode, setAccessMode] = useState<RoomAccessMode>('open');
   const [guestPassword, setGuestPassword] = useState('');
   const [codePeriodHours, setCodePeriodHours] = useState('24');
+  const [trustedRoles, setTrustedRoles] = useState('');
   const [creating, setCreating] = useState(false);
 
   return (
@@ -166,6 +167,10 @@ function CreateRoomCard({ onCreated }: { onCreated: () => void }) {
                   accessMode === 'static_password' ? guestPassword : undefined,
                 guest_code_period_seconds:
                   accessMode === 'rotating_code' ? periodHours * 3600 : undefined,
+                trusted_roles: trustedRoles
+                  .split(',')
+                  .map((role) => role.trim())
+                  .filter(Boolean),
               })
               .then(() => {
                 show(t('lobby.roomCreated', { name: trimmedName }));
@@ -175,6 +180,7 @@ function CreateRoomCard({ onCreated }: { onCreated: () => void }) {
                 setAccessMode('open');
                 setGuestPassword('');
                 setCodePeriodHours('24');
+                setTrustedRoles('');
                 onCreated();
               })
               .catch(showError)
@@ -242,6 +248,16 @@ function CreateRoomCard({ onCreated }: { onCreated: () => void }) {
               <span className="mt-1 block text-[11px] text-faint">{t('lobby.codePeriodHint')}</span>
             </label>
           )}
+          <label className="mt-4 block text-xs text-muted">
+            {t('lobby.trustedRoles')}
+            <input
+              value={trustedRoles}
+              onChange={(event) => setTrustedRoles(event.target.value)}
+              placeholder={t('lobby.trustedRolesPlaceholder')}
+              className="mt-1.5 w-full rounded-md border border-hairline bg-panel px-3 py-2 text-[13px] placeholder:text-faint"
+            />
+            <span className="mt-1 block text-[11px] text-faint">{t('lobby.trustedRolesHint')}</span>
+          </label>
           <div className="mt-6 flex justify-end gap-3">
             <button
               type="button"
@@ -290,6 +306,8 @@ function RoomCard({
     return () => clearInterval(id);
   }, []);
 
+  // now_playing 与房内五元组同构（position_ms + updated_at 纯函数字段），
+  // 切歌起播提前量窗口内推算值同样为负 → 钳到 0 再渲染。
   const np = room.now_playing;
   const pos = np
     ? Math.max(
