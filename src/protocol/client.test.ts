@@ -125,14 +125,21 @@ describe('YuzuClient', () => {
     );
 
     const broadcasts: unknown[] = [];
-    const unsubscribe = client.onBroadcast('queue.changed', (data) => {
+    const unsubscribe = client.onBroadcast('queue.snapshot', (data) => {
       broadcasts.push(data);
     });
-    transport.receive({ type: 'queue.changed', data: { queue: ['one'] } });
-    transport.receive({ type: 'queue.changed', ref: 'unknown', data: { queue: ['two'] } });
+    transport.receive({ type: 'queue.snapshot', data: { revision: 1, part: 0, items: [], done: true } });
+    transport.receive({
+      type: 'queue.snapshot',
+      ref: 'unknown',
+      data: { revision: 1, part: 0, items: [], done: true },
+    });
     unsubscribe();
-    transport.receive({ type: 'queue.changed', data: { queue: ['three'] } });
-    expect(broadcasts).toEqual([{ queue: ['one'] }, { queue: ['two'] }]);
+    transport.receive({ type: 'queue.snapshot', data: { revision: 2, part: 0, items: [], done: true } });
+    expect(broadcasts).toEqual([
+      { revision: 1, part: 0, items: [], done: true },
+      { revision: 1, part: 0, items: [], done: true },
+    ]);
 
     client.close();
     expect(client.status).toBe('offline');
@@ -268,6 +275,52 @@ describe('YuzuClient', () => {
     expect(client.status).toBe('online');
     expect(sessionReset).toHaveBeenCalledTimes(1);
     expect(statuses).toEqual(['connecting', 'online', 'reconnecting', 'online']);
+    client.close();
+  });
+
+  it('sends periodic keepalive pings and reconnects after a keepalive failure', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(10_000);
+    const transports: MockTransport[] = [];
+    const client = new YuzuClient({
+      createTransport: () => {
+        const transport = new MockTransport();
+        answerPings(transport);
+        transports.push(transport);
+        return transport;
+      },
+    });
+
+    const connecting = client.connect();
+    transports[0]?.open();
+    await connecting;
+    const afterSync = transports[0]?.sent.length ?? 0;
+
+    await vi.advanceTimersByTimeAsync(14_999);
+    expect(transports[0]?.sent.length).toBe(afterSync);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(transports[0]?.sent.length).toBe(afterSync + 1);
+    expect(transports[0]?.sent.at(-1)?.type).toBe('ping');
+    expect(client.status).toBe('online');
+
+    transports[0]!.onSend = (envelope) => {
+      if (envelope.type === 'ping') {
+        // Drop keepalive replies so the timeout forces a reconnect.
+      }
+    };
+    await vi.advanceTimersByTimeAsync(15_000);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await flushMicrotasks();
+
+    expect(client.status).toBe('reconnecting');
+    expect(transports[0]?.closeCalls).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(transports).toHaveLength(2);
+    transports[1]?.open();
+    await flushMicrotasks();
+    expect(client.status).toBe('online');
     client.close();
   });
 });

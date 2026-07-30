@@ -25,6 +25,9 @@ interface PendingRequest {
 }
 
 const RECONNECT_DELAYS_MS = [1_000, 2_000, 5_000, 10_000] as const;
+/** App-layer keepalive: keeps proxies from idle-closing silent WS links. */
+const KEEPALIVE_INTERVAL_MS = 15_000;
+const KEEPALIVE_TIMEOUT_MS = 10_000;
 
 type TimerHandle = number | NodeJS.Timeout;
 
@@ -43,6 +46,8 @@ export class YuzuClient {
   private connectTask: Promise<void> | null = null;
   private abortAttempt: ((error: YuzuError) => void) | null = null;
   private reconnectTimer: TimerHandle | null = null;
+  private keepaliveTimer: TimerHandle | null = null;
+  private keepaliveInFlight = false;
   private reconnectStep = 0;
   private intentionallyClosed = false;
 
@@ -163,6 +168,7 @@ export class YuzuClient {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+    this.stopKeepalive();
 
     const error = new YuzuError('internal', 'not connected');
     const abortAttempt = this.abortAttempt;
@@ -337,6 +343,7 @@ export class YuzuClient {
       return;
     }
 
+    this.stopKeepalive();
     this.setStatus('reconnecting');
     const delayIndex = Math.min(this.reconnectStep, RECONNECT_DELAYS_MS.length - 1);
     const delay = RECONNECT_DELAYS_MS[delayIndex];
@@ -384,6 +391,69 @@ export class YuzuClient {
     }
   }
 
+  private startKeepalive(): void {
+    this.stopKeepalive();
+    this.keepaliveTimer = setInterval(() => {
+      void this.keepaliveTick();
+    }, KEEPALIVE_INTERVAL_MS);
+  }
+
+  private stopKeepalive(): void {
+    if (this.keepaliveTimer !== null) {
+      clearInterval(this.keepaliveTimer);
+      this.keepaliveTimer = null;
+    }
+    this.keepaliveInFlight = false;
+  }
+
+  private async keepaliveTick(): Promise<void> {
+    if (
+      this.keepaliveInFlight ||
+      this.intentionallyClosed ||
+      this.statusValue !== 'online' ||
+      this.transport === null ||
+      !this.transportOpen
+    ) {
+      return;
+    }
+
+    const transport = this.transport;
+    this.keepaliveInFlight = true;
+    try {
+      await this.withTimeout(this.clockValue.sync(1), KEEPALIVE_TIMEOUT_MS);
+    } catch {
+      if (
+        this.intentionallyClosed ||
+        this.transport !== transport ||
+        this.statusValue !== 'online'
+      ) {
+        return;
+      }
+      this.discardTransport(transport, true);
+      this.scheduleReconnect();
+    } finally {
+      this.keepaliveInFlight = false;
+    }
+  }
+
+  private withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new YuzuError('internal', 'keepalive timeout'));
+      }, timeoutMs);
+      promise.then(
+        (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        (error: unknown) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      );
+    });
+  }
+
   private discardTransport(transport: TransportLike, close: boolean): void {
     if (this.transport !== transport) {
       return;
@@ -424,6 +494,11 @@ export class YuzuClient {
       return;
     }
     this.statusValue = status;
+    if (status === 'online') {
+      this.startKeepalive();
+    } else {
+      this.stopKeepalive();
+    }
     for (const callback of [...this.statusCallbacks]) {
       callback(status);
     }
