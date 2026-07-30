@@ -1,10 +1,10 @@
 import type { YuzuClient } from './client';
+import { QueueReplica, type QueuePatchPart, type QueueSnapshotPart } from './queue_protocol';
 import type {
   Listener,
   ListenersChanged,
   Playback,
   QueueAddAck,
-  QueueChanged,
   QueueEntry,
   RadioChanged,
   RadioState,
@@ -16,31 +16,34 @@ export interface RoomState {
   roomId: string | null;
   playback: Playback;
   queue: QueueEntry[];
+  queueRevision: number | null;
   listeners: Listener[];
   radio: RadioState | null;
 }
 
+type SnapshotType =
+  | 'playback.changed'
+  | 'queue.snapshot'
+  | 'radio.changed'
+  | 'listeners.changed';
+
 type BufferedSnapshot =
   | { type: 'playback.changed'; data: Playback }
-  | { type: 'queue.changed'; data: QueueChanged }
+  | { type: 'queue.snapshot'; data: QueueSnapshotPart }
+  | { type: 'queue.patch'; data: QueuePatchPart }
   | { type: 'radio.changed'; data: RadioChanged }
   | { type: 'listeners.changed'; data: ListenersChanged };
 
-const JOIN_SNAPSHOT_TYPES: ReadonlyArray<BufferedSnapshot['type']> = [
-  'playback.changed',
-  'queue.changed',
-  'radio.changed',
-  'listeners.changed',
-];
-
 interface JoinTracker {
-  stage: number;
+  joined: boolean;
+  received: Set<SnapshotType>;
   buffered: BufferedSnapshot[];
   completion: Promise<void>;
   finish(): void;
   aborted: Promise<never>;
   abort(error: YuzuError): void;
 }
+
 
 export class SessionStore {
   private state: RoomState = {
@@ -53,18 +56,24 @@ export class SessionStore {
       rate: 1,
     },
     queue: [],
+    queueRevision: null,
     listeners: [],
     radio: null,
   };
   private readonly subscribers = new Set<() => void>();
+  private readonly queueReplica = new QueueReplica();
   private joining: JoinTracker | null = null;
+  private queueSyncInFlight = false;
 
   constructor(private readonly client: YuzuClient) {
     client.onBroadcast('playback.changed', (data) => {
       this.applyPlayback(data as Playback);
     });
-    client.onBroadcast('queue.changed', (data) => {
-      this.applyQueue(data as QueueChanged);
+    client.onBroadcast('queue.snapshot', (data) => {
+      this.applyQueueSnapshot(data as QueueSnapshotPart);
+    });
+    client.onBroadcast('queue.patch', (data) => {
+      this.applyQueuePatch(data as QueuePatchPart);
     });
     client.onBroadcast('radio.changed', (data) => {
       this.applyRadio(data as RadioChanged);
@@ -73,8 +82,15 @@ export class SessionStore {
       this.applyListeners(data as ListenersChanged);
     });
     client.onStatusChange((status) => {
-      if (status === 'reconnecting' || status === 'offline') {
+      if (status === 'offline') {
+        // Intentional close / logout: drop room state. Transient reconnects keep
+        // the last snapshot so audio can keep playing until rejoin refreshes it.
         this.resetRoom(new YuzuError('internal', 'connection lost'));
+      } else if (status === 'reconnecting') {
+        // Abort an in-flight join, but leave roomId/playback/queue intact.
+        const tracker = this.joining;
+        this.joining = null;
+        tracker?.abort(new YuzuError('internal', 'connection lost'));
       }
     });
   }
@@ -104,7 +120,8 @@ export class SessionStore {
       abort = reject;
     });
     const tracker: JoinTracker = {
-      stage: 0,
+      joined: false,
+      received: new Set(),
       buffered: [],
       completion,
       finish,
@@ -112,21 +129,20 @@ export class SessionStore {
       abort,
     };
     this.joining = tracker;
+    this.queueReplica.beginJoin();
 
     try {
+      const data = password ? { room_id: roomId, password } : { room_id: roomId };
       const joined = await Promise.race([
-        this.client.request<RoomJoined>('room.join', {
-          room_id: roomId,
-          password: password ?? '',
-        }),
+        this.client.request<RoomJoined>('room.join', data),
         tracker.aborted,
       ]);
       if (this.joining !== tracker) {
         throw new YuzuError('internal', 'join superseded');
       }
 
-      tracker.stage = 1;
       this.enterRoom(joined.room_id);
+      tracker.joined = true;
       const buffered = tracker.buffered;
       tracker.buffered = [];
       for (const snapshot of buffered) {
@@ -134,8 +150,11 @@ export class SessionStore {
           case 'playback.changed':
             this.applyPlayback(snapshot.data);
             break;
-          case 'queue.changed':
-            this.applyQueue(snapshot.data);
+          case 'queue.snapshot':
+            this.applyQueueSnapshot(snapshot.data);
+            break;
+          case 'queue.patch':
+            this.applyQueuePatch(snapshot.data);
             break;
           case 'radio.changed':
             this.applyRadio(snapshot.data);
@@ -184,6 +203,11 @@ export class SessionStore {
     });
   }
 
+  async clearQueue(): Promise<void> {
+    const roomId = this.requireRoom();
+    await this.client.request<void>('queue.clear', { room_id: roomId });
+  }
+
   async pause(): Promise<void> {
     const roomId = this.requireRoom();
     await this.client.request<void>('playback.pause', { room_id: roomId });
@@ -223,71 +247,103 @@ export class SessionStore {
   }
 
   private applyPlayback(playback: Playback): void {
-    if (this.joining?.stage === 0) {
+    if (this.joining !== null && !this.joining.joined) {
       this.joining.buffered.push({ type: 'playback.changed', data: playback });
       return;
     }
-    if (this.state.roomId === null) {
-      return;
-    }
+    if (this.state.roomId === null) return;
     this.publish({ ...this.state, playback });
     this.advanceJoin('playback.changed');
   }
 
-  private applyQueue(data: QueueChanged): void {
-    if (this.joining?.stage === 0) {
-      this.joining.buffered.push({ type: 'queue.changed', data });
+  private applyQueueSnapshot(data: QueueSnapshotPart): void {
+    if (this.joining !== null && !this.joining.joined) {
+      this.joining.buffered.push({ type: 'queue.snapshot', data });
       return;
     }
-    if (this.state.roomId === null) {
+    if (this.state.roomId === null) return;
+    try {
+      if (!this.queueReplica.acceptSnapshot(data)) return;
+    } catch {
+      this.queueReplica.markResyncRequired();
+      this.requestQueueSync();
       return;
     }
-    this.publish({ ...this.state, queue: data.queue });
-    this.advanceJoin('queue.changed');
+    const queue = this.queueReplica.state;
+    this.publish({ ...this.state, queue: queue.items, queueRevision: queue.revision });
+    this.advanceJoin('queue.snapshot');
+  }
+
+  private applyQueuePatch(data: QueuePatchPart): void {
+    if (this.joining !== null && !this.joining.joined) {
+      this.joining.buffered.push({ type: 'queue.patch', data });
+      return;
+    }
+    if (this.state.roomId === null) return;
+    try {
+      if (!this.queueReplica.acceptPatch(data)) return;
+    } catch {
+      this.queueReplica.markResyncRequired();
+      this.requestQueueSync();
+      return;
+    }
+    const queue = this.queueReplica.state;
+    this.publish({ ...this.state, queue: queue.items, queueRevision: queue.revision });
+  }
+
+  private requestQueueSync(): void {
+    const roomId = this.state.roomId;
+    if (roomId === null || this.queueSyncInFlight) return;
+    this.queueSyncInFlight = true;
+    void this.client
+      .request<void>('queue.sync', { room_id: roomId })
+      .catch(() => {
+        this.queueReplica.markResyncRequired();
+      })
+      .finally(() => {
+        this.queueSyncInFlight = false;
+      });
   }
 
   private applyRadio(data: RadioChanged): void {
-    if (this.joining?.stage === 0) {
+    if (this.joining !== null && !this.joining.joined) {
       this.joining.buffered.push({ type: 'radio.changed', data });
       return;
     }
-    if (this.state.roomId === null) {
-      return;
-    }
+    if (this.state.roomId === null) return;
     this.publish({ ...this.state, radio: data.radio });
     this.advanceJoin('radio.changed');
   }
 
   private applyListeners(data: ListenersChanged): void {
-    if (this.joining?.stage === 0) {
+    if (this.joining !== null && !this.joining.joined) {
       this.joining.buffered.push({ type: 'listeners.changed', data });
       return;
     }
-    if (this.state.roomId === null) {
-      return;
-    }
+    if (this.state.roomId === null) return;
     this.publish({ ...this.state, listeners: data.listeners });
     this.advanceJoin('listeners.changed');
   }
 
-  private advanceJoin(type: BufferedSnapshot['type']): void {
+  private advanceJoin(type: SnapshotType): void {
     const tracker = this.joining;
-    if (tracker === null || tracker.stage === 0) {
-      return;
-    }
-    const expected = JOIN_SNAPSHOT_TYPES[tracker.stage - 1];
-    if (type !== expected) {
-      return;
-    }
-
-    tracker.stage += 1;
-    if (tracker.stage === 5) {
+    if (tracker === null || !tracker.joined) return;
+    tracker.received.add(type);
+    if (tracker.received.size === 4) {
       this.joining = null;
       tracker.finish();
     }
   }
 
   private enterRoom(roomId: string): void {
+    // Soft rejoin after reconnect: keep the last state until the new
+    // playback/queue/radio/listener snapshots arrive.
+    if (this.state.roomId === roomId) {
+      this.publish({ ...this.state, roomId });
+      return;
+    }
+
+    this.queueReplica.reset();
     const playback =
       this.state.playback.current === null &&
       this.state.playback.position_ms === 0 &&
@@ -305,8 +361,9 @@ export class SessionStore {
     this.publish({
       roomId,
       playback,
-      queue: this.state.queue.length === 0 ? this.state.queue : [],
-      listeners: this.state.listeners.length === 0 ? this.state.listeners : [],
+      queue: [],
+      queueRevision: null,
+      listeners: [],
       radio: null,
     });
   }
@@ -315,6 +372,7 @@ export class SessionStore {
     const tracker = this.joining;
     this.joining = null;
     tracker?.abort(error);
+    this.queueReplica.reset();
 
     const playbackIsIdle =
       this.state.playback.current === null &&
@@ -333,16 +391,18 @@ export class SessionStore {
             playing: false,
             rate: 1,
           },
-      queue: this.state.queue.length === 0 ? this.state.queue : [],
-      listeners: this.state.listeners.length === 0 ? this.state.listeners : [],
+      queue: [],
+      queueRevision: null,
+      listeners: [],
       radio: null,
     };
 
     if (
       this.state.roomId !== null ||
       nextState.playback !== this.state.playback ||
-      nextState.queue !== this.state.queue ||
-      nextState.listeners !== this.state.listeners ||
+      this.state.queue.length > 0 ||
+      this.state.queueRevision !== null ||
+      this.state.listeners.length > 0 ||
       this.state.radio !== null
     ) {
       this.publish(nextState);

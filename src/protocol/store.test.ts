@@ -115,18 +115,22 @@ async function joinRoom(store: SessionStore, transport: MockTransport): Promise<
     data: { room_id: 'room-1' },
   });
   await flushMicrotasks();
-  transport.receive({ type: 'playback.changed', data: initialPlayback });
-  transport.receive({ type: 'queue.changed', data: { queue: [queueEntry] } });
-  transport.receive({ type: 'radio.changed', data: { radio } });
+  // State broadcasts are independent of one another; queue is revisioned.
   transport.receive({
     type: 'listeners.changed',
     data: { listeners: [{ id: 'g_1', name: 'Yuzu' }] },
   });
+  transport.receive({ type: 'radio.changed', data: { radio } });
+  transport.receive({
+    type: 'queue.snapshot',
+    data: { revision: 1, part: 0, items: [queueEntry], done: true },
+  });
+  transport.receive({ type: 'playback.changed', data: initialPlayback });
   await joining;
 }
 
 describe('SessionStore', () => {
-  it('waits for the ordered five-message join sequence', async () => {
+  it('waits for all independently delivered room snapshots', async () => {
     const { client, store, transport } = await createConnectedStore();
     let resolved = false;
     const joining = store.join('room-1', 'secret').then(() => {
@@ -149,7 +153,10 @@ describe('SessionStore', () => {
     expect(resolved).toBe(false);
 
     transport.receive({ type: 'playback.changed', data: initialPlayback });
-    transport.receive({ type: 'queue.changed', data: { queue: [queueEntry] } });
+    transport.receive({
+      type: 'queue.snapshot',
+      data: { revision: 1, part: 0, items: [queueEntry], done: true },
+    });
     transport.receive({ type: 'radio.changed', data: { radio } });
     await flushMicrotasks();
     expect(resolved).toBe(false);
@@ -163,6 +170,7 @@ describe('SessionStore', () => {
       roomId: 'room-1',
       playback: initialPlayback,
       queue: [queueEntry],
+      queueRevision: 1,
       radio,
       listeners: [{ id: 'g_1', name: 'Yuzu' }],
     });
@@ -173,14 +181,16 @@ describe('SessionStore', () => {
     const { client, store, transport } = await createConnectedStore();
     const joining = store.join('room-1');
     const joinEnvelope = transport.sent.at(-1);
-
     transport.receive({
       type: 'room.joined',
       ref: joinEnvelope?.ref,
       data: { room_id: 'room-1' },
     });
     transport.receive({ type: 'playback.changed', data: initialPlayback });
-    transport.receive({ type: 'queue.changed', data: { queue: [queueEntry] } });
+    transport.receive({
+      type: 'queue.snapshot',
+      data: { revision: 1, part: 0, items: [queueEntry], done: true },
+    });
     transport.receive({ type: 'radio.changed', data: { radio } });
     transport.receive({
       type: 'listeners.changed',
@@ -189,6 +199,7 @@ describe('SessionStore', () => {
 
     await joining;
     expect(store.getState().roomId).toBe('room-1');
+    expect(store.getState().queueRevision).toBe(1);
     expect(store.getState().queue).toEqual([queueEntry]);
     expect(store.getState().listeners).toEqual([{ id: 'g_1', name: 'Yuzu' }]);
     client.close();
@@ -214,9 +225,13 @@ describe('SessionStore', () => {
     expect(afterPlayback.radio).toBe(beforePlayback.radio);
 
     const nextQueue = [{ ...queueEntry, entry_id: 'entry-2' }];
-    transport.receive({ type: 'queue.changed', data: { queue: nextQueue } });
+    transport.receive({
+      type: 'queue.snapshot',
+      data: { revision: 2, part: 0, items: nextQueue, done: true },
+    });
     const afterQueue = store.getState();
     expect(afterQueue.queue).toEqual(nextQueue);
+    expect(afterQueue.queueRevision).toBe(2);
     expect(afterQueue.queue).not.toBe(afterPlayback.queue);
     expect(afterQueue.playback).toBe(afterPlayback.playback);
     expect(afterQueue.listeners).toBe(afterPlayback.listeners);
@@ -236,6 +251,37 @@ describe('SessionStore', () => {
     expect(afterRadio.playback).toBe(afterListeners.playback);
     expect(afterRadio.queue).toBe(afterListeners.queue);
     expect(afterRadio.listeners).toBe(afterListeners.listeners);
+    client.close();
+  });
+
+  it('requests a fresh baseline when a patch cannot continue the local revision', async () => {
+    const { client, store, transport } = await createConnectedStore();
+    await joinRoom(store, transport);
+    const before = store.getState();
+
+    transport.receive({
+      type: 'queue.patch',
+      data: {
+        base_revision: 0,
+        revision: 1,
+        part: 0,
+        ops: [{ op: 'clear' }],
+        done: true,
+      },
+    });
+    const syncEnvelope = transport.sent.at(-1);
+    expect(syncEnvelope?.type).toBe('queue.sync');
+    expect(syncEnvelope?.data).toEqual({ room_id: 'room-1' });
+    expect(syncEnvelope?.ref).toEqual(expect.any(String));
+    expect(store.getState()).toBe(before);
+
+    transport.receive({
+      type: 'queue.snapshot',
+      data: { revision: 2, part: 0, items: [], done: true },
+    });
+    transport.receive({ type: 'ack', ref: syncEnvelope?.ref, data: {} });
+    expect(store.getState().queue).toEqual([]);
+    expect(store.getState().queueRevision).toBe(2);
     client.close();
   });
 
@@ -289,6 +335,11 @@ describe('SessionStore', () => {
         type: 'queue.move',
         data: { room_id: 'room-1', entry_id: 'entry-1', to_index: 3 },
       },
+      {
+        run: () => store.clearQueue(),
+        type: 'queue.clear',
+        data: { room_id: 'room-1' },
+      },
       { run: () => store.pause(), type: 'playback.pause', data: { room_id: 'room-1' } },
       { run: () => store.resume(), type: 'playback.resume', data: { room_id: 'room-1' } },
       {
@@ -334,20 +385,46 @@ describe('SessionStore', () => {
         rate: 1,
       },
       queue: [],
+      queueRevision: null,
       listeners: [],
       radio: null,
     });
     client.close();
   });
 
-  it('returns to the idle state as soon as the connection drops', async () => {
+  it('keeps the room snapshot while reconnecting and only clears on offline', async () => {
     vi.useFakeTimers();
     const { client, store, transport } = await createConnectedStore();
     await joinRoom(store, transport);
 
+    const playing: Playback = {
+      current: {
+        ...queueEntry,
+        stream_url: '/stream/v1/ncm:1?ticket=one',
+      },
+      position_ms: 12_000,
+      updated_at: 2_000,
+      playing: true,
+      rate: 1,
+    };
+    transport.receive({ type: 'playback.changed', data: playing });
+    const before = store.getState();
+
     transport.disconnect();
 
     expect(client.status).toBe('reconnecting');
+    expect(store.getState()).toBe(before);
+    expect(store.getState()).toEqual({
+      roomId: 'room-1',
+      playback: playing,
+      queue: [queueEntry],
+      listeners: [{ id: 'g_1', name: 'Yuzu' }],
+      queueRevision: 1,
+      radio,
+    });
+
+    client.close();
+    expect(client.status).toBe('offline');
     expect(store.getState()).toEqual({
       roomId: null,
       playback: {
@@ -359,9 +436,9 @@ describe('SessionStore', () => {
       },
       queue: [],
       listeners: [],
+      queueRevision: null,
       radio: null,
     });
-    client.close();
     vi.useRealTimers();
   });
 });
