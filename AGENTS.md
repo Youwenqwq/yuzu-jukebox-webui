@@ -95,7 +95,7 @@ pnpm build          # tsc -b + vite build
 
 - [x] Phase A 收听体验：辉光、同步歌词（共用 should_be 时钟）、Media Session、
       Toast 系统、大厅实况（服务端 G1: rooms 带 listener_count/now_playing）
-- [ ] Phase B 队列增强：queue.move 拖拽（admin）、批量入队 UI（内核 batch 已就绪）
+- [X] Phase B 队列增强：queue.move 拖拽（admin）、批量入队 UI（内核 batch 已就绪）
 - [x] Phase C 管理界面：radix-ui primitives（未引 shadcn，见其下）——房间内
       电台/策略/历史、大厅房间建删、/admin 歌单/媒体（上传/本地媒体管理/缓存/凭据扫码）/
       播放端；服务端配套：GET/DELETE /api/v1/media
