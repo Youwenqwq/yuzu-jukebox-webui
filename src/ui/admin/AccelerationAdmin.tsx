@@ -24,6 +24,7 @@ import {
   LoadingHint,
   StatusDot,
   accentLinkButtonClass,
+  cacheModeLabel,
   dangerButtonClass,
   dangerTextClass,
   linkButtonClass,
@@ -571,6 +572,20 @@ function AccelerationDetail({
               mono
             />
             <InfoRow
+              label={t('admin.acceleration.prefetchHorizon')}
+              value={String(acceleration.prefetch_horizon)}
+              mono
+            />
+            <InfoRow
+              label={t('admin.acceleration.prefetchShare')}
+              value={
+                acceleration.cache_mode === 'prefetch'
+                  ? t('admin.acceleration.notApplicable')
+                  : `${acceleration.prefetch_share_percent}%`
+              }
+              mono
+            />
+            <InfoRow
               label={t('admin.acceleration.inventoryInterval')}
               value={`${acceleration.inventory_interval_seconds}s`}
               mono
@@ -640,10 +655,7 @@ function AccelerationDetail({
 
       <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-hairline pt-4 text-xs text-muted">
         <span>
-          {t('admin.acceleration.publishOnReady')}：
-          {acceleration.publish_on_cache_ready
-            ? t('admin.acceleration.statusEnabled')
-            : t('admin.acceleration.statusDisabled')}
+          {t('admin.acceleration.cacheMode')}：{cacheModeLabel(t, acceleration.cache_mode)}
         </span>
         <span className={healthy(acceleration) === false ? dangerTextClass : undefined}>
           {t('admin.acceleration.health')}：{healthLabel(acceleration, t)}

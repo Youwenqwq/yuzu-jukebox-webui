@@ -46,6 +46,21 @@ export function stateLabel(t: Translate, value: string): string {
   return label === `admin.acceleration.states.${value}` ? value : label;
 }
 
+/**
+ * accelerations.cache_mode：prefetch（仅待播）/ prefetch_and_heat（待播 + 热度）。
+ * 未知取值回退原始串，与 stateLabel 同一约定。
+ */
+export function cacheModeLabel(t: Translate, value: string): string {
+  if (!value) return t('admin.common.none');
+  const key =
+    value === 'prefetch'
+      ? 'admin.acceleration.cacheModePrefetch'
+      : value === 'prefetch_and_heat'
+        ? 'admin.acceleration.cacheModePrefetchAndHeat'
+        : '';
+  return key === '' ? value : t(key);
+}
+
 /** storage.pressure：unmanaged / normal / high / full。 */
 export function pressureLabel(t: Translate, value: string): string {
   if (!value) return t('admin.common.none');

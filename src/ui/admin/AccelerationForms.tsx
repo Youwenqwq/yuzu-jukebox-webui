@@ -8,8 +8,14 @@
  */
 import { useId, useMemo } from 'react';
 import type { ReactNode } from 'react';
-import type { AccelerationInfo, CreateAccelerationInput, UpdateAccelerationInput } from '../../api/types';
+import type {
+  AccelerationCacheMode,
+  AccelerationInfo,
+  CreateAccelerationInput,
+  UpdateAccelerationInput,
+} from '../../api/types';
 import { formatBytes } from '../format';
+import { Select } from '../primitives';
 import {
   formatRate,
   formatSeconds,
@@ -24,7 +30,9 @@ export interface AccelerationDraft {
   name: string;
   controlBaseUrl: string;
   backendBaseUrl: string;
-  publishOnCacheReady: boolean;
+  cacheMode: AccelerationCacheMode;
+  prefetchHorizon: string;
+  prefetchSharePercent: string;
   leaseTtlSeconds: string;
   uploadRateBytesPerSecond: string;
   maxObjectBytes: string;
@@ -39,14 +47,19 @@ type DraftErrors = Partial<Record<keyof AccelerationDraft, string>>;
 
 const MIB = 1024 * 1024;
 
-/** 与原实现相同的默认值（850 MiB 容量 / 23 MiB 单对象 / 95%-85% 水位）。 */
+/** 服务端 validateAccelerationCachePolicy 的硬上界，越界会被 400 拒绝。 */
+const MAX_PREFETCH_HORIZON = 20;
+
+/** 默认值对齐服务端 create 缺省（850 MiB 容量 / 23 MiB 单对象 / 95%-85% 水位 / 待播+热度 2 首 20%）。 */
 export function emptyDraft(): AccelerationDraft {
   return {
     id: '',
     name: '',
     controlBaseUrl: '',
     backendBaseUrl: '',
-    publishOnCacheReady: true,
+    cacheMode: 'prefetch_and_heat',
+    prefetchHorizon: '2',
+    prefetchSharePercent: '20',
     leaseTtlSeconds: '600',
     uploadRateBytesPerSecond: '187500',
     maxObjectBytes: String(23 * MIB),
@@ -64,7 +77,9 @@ export function draftFromAcceleration(acceleration: AccelerationInfo): Accelerat
     name: acceleration.name,
     controlBaseUrl: acceleration.control_base_url,
     backendBaseUrl: acceleration.backend_base_url,
-    publishOnCacheReady: acceleration.publish_on_cache_ready,
+    cacheMode: acceleration.cache_mode,
+    prefetchHorizon: String(acceleration.prefetch_horizon),
+    prefetchSharePercent: String(acceleration.prefetch_share_percent),
     leaseTtlSeconds: String(acceleration.lease_ttl_seconds),
     uploadRateBytesPerSecond: String(acceleration.upload_rate_bytes_per_second),
     maxObjectBytes: String(acceleration.max_object_bytes),
@@ -83,7 +98,9 @@ export function toCreateInput(draft: AccelerationDraft): CreateAccelerationInput
     name: draft.name.trim(),
     control_base_url: draft.controlBaseUrl.trim(),
     backend_base_url: draft.backendBaseUrl.trim(),
-    publish_on_cache_ready: draft.publishOnCacheReady,
+    cache_mode: draft.cacheMode,
+    prefetch_horizon: Number(draft.prefetchHorizon),
+    prefetch_share_percent: Number(draft.prefetchSharePercent),
     lease_ttl_seconds: Number(draft.leaseTtlSeconds),
     upload_rate_bytes_per_second: Number(draft.uploadRateBytesPerSecond),
     max_object_bytes: Number(draft.maxObjectBytes),
@@ -95,11 +112,13 @@ export function toCreateInput(draft: AccelerationDraft): CreateAccelerationInput
   };
 }
 
-/** 更新请求体：与原 openEdit 相同的 12 个字段，enabled 仍由启用/停用单独提交。 */
+/** 更新请求体：与原 openEdit 相同的字段集，enabled 仍由启用/停用单独提交。 */
 export function toUpdateInput(draft: AccelerationDraft): UpdateAccelerationInput {
   return {
     name: draft.name.trim(),
-    publish_on_cache_ready: draft.publishOnCacheReady,
+    cache_mode: draft.cacheMode,
+    prefetch_horizon: Number(draft.prefetchHorizon),
+    prefetch_share_percent: Number(draft.prefetchSharePercent),
     control_base_url: draft.controlBaseUrl.trim(),
     backend_base_url: draft.backendBaseUrl.trim(),
     lease_ttl_seconds: Number(draft.leaseTtlSeconds),
@@ -167,6 +186,21 @@ export function validateDraft(draft: AccelerationDraft, t: Translate, withId: bo
   if (low === null || low <= 0 || low > 100) errors.storageLowWatermarkPercent = t('admin.acceleration.invalidPercent');
   if (high !== null && low !== null && !errors.storageHighWatermarkPercent && !errors.storageLowWatermarkPercent && low >= high) {
     errors.storageLowWatermarkPercent = t('admin.acceleration.invalidWatermarkOrder');
+  }
+
+  const horizon = parseInteger(draft.prefetchHorizon);
+  if (horizon === null || horizon > MAX_PREFETCH_HORIZON) {
+    errors.prefetchHorizon = t('admin.acceleration.invalidPrefetchHorizon', { max: MAX_PREFETCH_HORIZON });
+  } else if (draft.cacheMode === 'prefetch' && horizon === 0) {
+    // 仅待播模式的需求集合只有队列视界这一个来源，视界为 0 = 资源启用了却什么都不缓存。
+    errors.prefetchHorizon = t('admin.acceleration.invalidPrefetchHorizonZero');
+  }
+  const share = parseInteger(draft.prefetchSharePercent);
+  if (share === null || share < 1 || share > 100) {
+    errors.prefetchSharePercent = t('admin.acceleration.invalidPercent');
+  } else if (draft.cacheMode === 'prefetch_and_heat' && low !== null && !errors.storageLowWatermarkPercent && share > low) {
+    // 钉住的待播对象 GC 动不了：份额上限越过低水位，回收目标就永远够不到。
+    errors.prefetchSharePercent = t('admin.acceleration.invalidPrefetchShareOverLow', { low });
   }
 
   const interval = parseInteger(draft.inventoryIntervalSeconds);
@@ -276,6 +310,38 @@ function NumberField({
   );
 }
 
+/**
+ * 枚举字段。radix Select 的触发器是 button，不能被 <label> 包住（点标签会误触发下拉），
+ * 所以沿用 IntegrationMappingPanels 的写法：说明性 span + ariaLabel。
+ */
+function SelectField({
+  label,
+  value,
+  options,
+  hint,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: Array<{ value: string; label: string }>;
+  hint?: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="min-w-0">
+      <span className="block text-xs text-muted">{label}</span>
+      <Select
+        value={value}
+        onValueChange={onChange}
+        options={options}
+        ariaLabel={label}
+        className="mt-1.5 w-full"
+      />
+      {hint !== undefined && hint !== '' && <span className="mt-1 block text-[11px] text-faint">{hint}</span>}
+    </div>
+  );
+}
+
 function FieldGroup({ title, children }: { title: string; children: ReactNode }) {
   return (
     <fieldset className="min-w-0">
@@ -313,6 +379,10 @@ export function AccelerationFields({
     }),
     [draft, t],
   );
+
+  // prefetch 模式下待播可以用满预算，份额不参与计算。字段不禁用——禁用会让上一模式
+  // 遗留的非法值既改不动又拦住提交，这里只把「不生效」写在说明里。
+  const shareInactive = draft.cacheMode === 'prefetch';
 
   return (
     <div className="grid gap-5">
@@ -405,6 +475,43 @@ export function AccelerationFields({
         </div>
       </FieldGroup>
 
+      <FieldGroup title={t('admin.acceleration.formCache')}>
+        <SelectField
+          label={t('admin.acceleration.cacheMode')}
+          value={draft.cacheMode}
+          options={[
+            { value: 'prefetch', label: t('admin.acceleration.cacheModePrefetch') },
+            { value: 'prefetch_and_heat', label: t('admin.acceleration.cacheModePrefetchAndHeat') },
+          ]}
+          hint={
+            draft.cacheMode === 'prefetch'
+              ? t('admin.acceleration.cacheModePrefetchHint')
+              : t('admin.acceleration.cacheModePrefetchAndHeatHint')
+          }
+          onChange={(value) => onChange({ cacheMode: value as AccelerationCacheMode })}
+        />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <NumberField
+            label={t('admin.acceleration.prefetchHorizon')}
+            value={draft.prefetchHorizon}
+            error={errors.prefetchHorizon}
+            hint={t('admin.acceleration.prefetchHorizonHint')}
+            onChange={(value) => onChange({ prefetchHorizon: value })}
+          />
+          <NumberField
+            label={t('admin.acceleration.prefetchShare')}
+            value={draft.prefetchSharePercent}
+            error={errors.prefetchSharePercent}
+            hint={
+              shareInactive
+                ? t('admin.acceleration.prefetchShareInactive')
+                : t('admin.acceleration.prefetchShareHint')
+            }
+            onChange={(value) => onChange({ prefetchSharePercent: value })}
+          />
+        </div>
+      </FieldGroup>
+
       <FieldGroup title={t('admin.acceleration.formInventory')}>
         <div className="grid gap-3 sm:grid-cols-2">
           <NumberField
@@ -423,16 +530,6 @@ export function AccelerationFields({
           />
         </div>
       </FieldGroup>
-
-      <label className="flex items-center gap-2 text-xs text-muted">
-        <input
-          type="checkbox"
-          className="yuzu-checkbox"
-          checked={draft.publishOnCacheReady}
-          onChange={(event) => onChange({ publishOnCacheReady: event.target.checked })}
-        />
-        {t('admin.acceleration.publishOnReady')}
-      </label>
     </div>
   );
 }

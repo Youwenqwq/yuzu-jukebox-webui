@@ -222,12 +222,24 @@ export interface QrLoginPollResult {
   message: string;
 }
 
+/**
+ * 加速资源的缓存模式（服务端 `accelerations.cache_mode`）。
+ *
+ * - `prefetch`：只缓存各房间队列视界内的待播曲目，工作集 = 房间数 × prefetch_horizon，
+ *   有上界；其余曲目回源。此模式下待播可以用满预算，prefetch_share_percent 不生效。
+ * - `prefetch_and_heat`：视界之外还缓存被播放过的热曲目。待播优先且不可驱逐，
+ *   但占用不超过 prefetch_share_percent，剩下的份额归热度曲目。
+ */
+export type AccelerationCacheMode = 'prefetch' | 'prefetch_and_heat';
+
 export interface AccelerationInfo {
   id: string;
   name: string;
   kind: string;
   enabled: boolean;
-  publish_on_cache_ready: boolean;
+  cache_mode: AccelerationCacheMode;
+  prefetch_horizon: number;
+  prefetch_share_percent: number;
   control_base_url: string;
   backend_base_url: string;
   lease_ttl_seconds: number;
@@ -258,7 +270,9 @@ export interface CreateAccelerationInput {
   kind?: string;
   control_base_url: string;
   backend_base_url: string;
-  publish_on_cache_ready?: boolean;
+  cache_mode?: AccelerationCacheMode;
+  prefetch_horizon?: number;
+  prefetch_share_percent?: number;
   lease_ttl_seconds?: number;
   upload_rate_bytes_per_second?: number;
   max_object_bytes?: number;
@@ -272,7 +286,9 @@ export interface CreateAccelerationInput {
 export interface UpdateAccelerationInput {
   name?: string;
   enabled?: boolean;
-  publish_on_cache_ready?: boolean;
+  cache_mode?: AccelerationCacheMode;
+  prefetch_horizon?: number;
+  prefetch_share_percent?: number;
   control_base_url?: string;
   backend_base_url?: string;
   lease_ttl_seconds?: number;
