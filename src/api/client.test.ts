@@ -851,7 +851,7 @@ describe('ApiClient', () => {
         accounted_bytes: 100,
         reserved_bytes: 20,
         observed_bytes: 110,
-        object_count: 2,
+        managed_object_count: 2,
         observed_object_count: 2,
         orphan_count: 0,
         missing_count: 0,

@@ -378,12 +378,14 @@ export interface AccelerationStorageStatus {
   accounted_bytes: number;
   reserved_bytes: number;
   observed_bytes: number;
-  object_count: number;
+  managed_object_count: number;
   observed_object_count: number;
   orphan_count: number;
   missing_count: number;
   pending_deletion_count: number;
-  last_reconciled_at?: number;
+  observed_at?: number;
+  stale_after_seconds?: number;
+  stale?: boolean;
   reconciliation_error?: string;
   pressure: string;
 }

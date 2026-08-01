@@ -331,16 +331,16 @@ function StorageSection({ status, t }: { status: AccelerationStatus; t: Translat
         <MetricTile label={t('admin.acceleration.accounted')} value={formatBytes(storage.accounted_bytes)} />
         <MetricTile label={t('admin.acceleration.reserved')} value={formatBytes(storage.reserved_bytes)} />
         <MetricTile label={t('admin.acceleration.observed')} value={formatBytes(storage.observed_bytes)} />
-        <MetricTile label={t('admin.acceleration.objectCount')} value={String(storage.object_count)} />
+        <MetricTile label={t('admin.acceleration.objectCount')} value={String(storage.managed_object_count)} />
         <MetricTile label={t('admin.acceleration.observedObjects')} value={String(storage.observed_object_count)} />
         <MetricTile label={t('admin.acceleration.pendingDeletion')} value={String(storage.pending_deletion_count)} />
         <MetricTile label={t('admin.acceleration.orphanCount')} value={String(storage.orphan_count)} />
         <MetricTile label={t('admin.acceleration.missingCount')} value={String(storage.missing_count)} />
       </div>
-      {storage.last_reconciled_at !== undefined && storage.last_reconciled_at > 0 && (
+      {storage.observed_at !== undefined && storage.observed_at > 0 && (
         <p className="mt-2 text-xs text-faint">
           {t('admin.acceleration.lastReconciled')}：
-          <span className="font-mono tabular-nums">{formatDateTime(storage.last_reconciled_at)}</span>
+          <span className="font-mono tabular-nums">{formatDateTime(storage.observed_at)}</span>
         </p>
       )}
       {storage.reconciliation_error && (
