@@ -292,6 +292,81 @@ describe('AudioRenderer', () => {
     expect(audio.loadCalls).toBe(loadCalls + 1);
     expect(audio.src).toBe(source);
   });
+
+  it('personal pause silences rendering while the room keeps playing, then resumes aligned', () => {
+    const audio = new FakeAudio();
+    audio.readyState = 4;
+    const clock = new FakeClock(2_000);
+    const renderer = makeRenderer(audio, clock);
+
+    renderer.render(makePlayback({ positionMs: 5_000, updatedAt: 1_000 }));
+    expect(audio.playCalls).toBe(1);
+    expect(audio.paused).toBe(false);
+
+    renderer.pausePersonal();
+    expect(renderer.isPersonalPaused).toBe(true);
+    expect(audio.paused).toBe(true);
+
+    // 房间继续播：新状态到来只装载（同曲目不重载），不出声。
+    const playCalls = audio.playCalls;
+    renderer.render(makePlayback({ positionMs: 20_000, updatedAt: 2_000 }));
+    expect(audio.playCalls).toBe(playCalls);
+    expect(audio.paused).toBe(true);
+
+    // 个人暂停期间 tick 不校偏：房间位置前进不应触发 seek。
+    clock.now = 3_000;
+    renderer.tick();
+    expect(audio.seekWrites).toEqual([]);
+
+    // 恢复：对齐房间当前应播位置（20s + 1s 前进）并出声。
+    renderer.resumePersonal();
+    expect(renderer.isPersonalPaused).toBe(false);
+    expect(audio.seekWrites.at(-1)).toBe(21);
+    expect(audio.playCalls).toBe(playCalls + 1);
+    expect(audio.paused).toBe(false);
+  });
+
+  it('personal pause across a room track change resumes into the new track', () => {
+    const audio = new FakeAudio();
+    audio.readyState = 4;
+    const clock = new FakeClock(1_000);
+    const renderer = makeRenderer(audio, clock);
+
+    renderer.render(makePlayback({ trackRef: 'local:one' }));
+    renderer.pausePersonal();
+
+    // 暂停期间房间切歌：装载新曲，保持静默。
+    const playCalls = audio.playCalls;
+    renderer.render(makePlayback({
+      trackRef: 'local:two',
+      streamUrl: '/stream/v1/local:two?ticket=two',
+      positionMs: 3_000,
+      updatedAt: 1_000,
+    }));
+    expect(audio.src).toBe(
+      'https://jukebox.example/stream/v1/local:two?ticket=two',
+    );
+    expect(audio.playCalls).toBe(playCalls);
+    expect(audio.paused).toBe(true);
+
+    // 恢复：新曲就绪回调把位置对齐到应播位置，然后出声。
+    renderer.resumePersonal();
+    expect(renderer.isPersonalPaused).toBe(false);
+    expect(audio.playCalls).toBe(playCalls + 1);
+    expect(audio.seekWrites.at(-1)).toBe(3);
+  });
+
+  it('resets personal pause and renders idle when leaving the room', () => {
+    const audio = new FakeAudio();
+    const clock = new FakeClock(1_000);
+    const renderer = makeRenderer(audio, clock);
+
+    renderer.render(makePlayback());
+    renderer.pausePersonal();
+    renderer.render(makePlayback({ trackRef: null }));
+    expect(renderer.isPersonalPaused).toBe(false);
+    expect(audio.paused).toBe(true);
+  });
 });
 
 describe('AudioRenderer start-lead window', () => {

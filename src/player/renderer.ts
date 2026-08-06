@@ -32,6 +32,12 @@ export class AudioRenderer {
   private pendingReadyHandler: EventListener | null = null;
   private startTimer: ReturnType<typeof setTimeout> | null = null;
   private mediaFailed = false;
+  /**
+   * 个人暂停（前端暂停）：渲染层静默，房间播放状态不变（服务端权威）。
+   * 暂停期间 render() 只装载不出声、tick() 不校偏不学基线；恢复时重新
+   * 对齐房间当前应播位置——期间若房间切了歌，则从新歌当前位置继续。
+   */
+  private personalPaused = false;
 
   constructor(
     private readonly audio: HTMLAudioElement,
@@ -78,6 +84,8 @@ export class AudioRenderer {
     this.playback = playback;
 
     if (current === null) {
+      // 离房/停止：个人暂停随房间语境一并清除，换房后默认重新跟随。
+      this.personalPaused = false;
       this.cancelPendingReadyHandler();
       this.loadedTrackRef = null;
       this.loadedStreamUrl = null;
@@ -151,7 +159,7 @@ export class AudioRenderer {
       if (this.audio.currentTime !== 0) {
         this.audio.currentTime = 0;
       }
-      if (streamUrl !== null && playback.playing) {
+      if (streamUrl !== null && playback.playing && !this.personalPaused) {
         const expectedTrackRef = current.track_ref;
         this.startTimer = setTimeout(
           () => this.startLeadPlayback(expectedTrackRef),
@@ -162,7 +170,7 @@ export class AudioRenderer {
       return;
     }
 
-    if (streamUrl !== null && playback.playing) {
+    if (streamUrl !== null && playback.playing && !this.personalPaused) {
       if (mediaChanged || this.audio.paused) {
         void this.audio.play().catch(() => {
           // Autoplay and media failures are surfaced by the element. A later
@@ -177,6 +185,12 @@ export class AudioRenderer {
   }
 
   tick(): void {
+    if (this.personalPaused) {
+      // 个人暂停：本地静止，不 sample——否则房间位置的持续前进
+      // 会被当成设备漂移 seek 回来，甚至学成基线污染恢复后的对齐。
+      return;
+    }
+
     const playback = this.playback;
     if (playback === null) {
       return;
@@ -194,11 +208,56 @@ export class AudioRenderer {
     this.applyIntents(intents);
   }
 
+  get isPersonalPaused(): boolean {
+    return this.personalPaused;
+  }
+
+  /**
+   * 个人暂停：渲染层静默，房间继续播放（不向服务端发任何命令）。
+   * 已装载媒体保留在当前位置；房间侧仍在走，恢复时对齐。
+   */
+  pausePersonal(): void {
+    if (this.personalPaused) {
+      return;
+    }
+    this.personalPaused = true;
+    this.cancelStartTimer();
+    this.audio.pause();
+  }
+
+  /**
+   * 恢复跟随：重新对齐房间当前应播位置并出声。
+   * 暂停期间房间切歌 → 新曲已装载（render 只装载不出声），这里对齐到
+   * 新曲应播位置；未切歌 → 对齐原曲当前位置。负窗口（新曲未开播）
+   * 停在 0 待命，交由 render 的起播定时器开声。
+   */
+  resumePersonal(): void {
+    if (!this.personalPaused) {
+      return;
+    }
+    this.personalPaused = false;
+    const playback = this.playback;
+    const current = playback?.current;
+    if (!playback || !current || playback.playing === false) {
+      return;
+    }
+    const shouldBeMs = shouldBePositionMs(playback, this.clock.serverNow());
+    // 未切歌：手动对齐（切歌场景由 render 的 loadedmetadata 就绪回调对齐）。
+    if (this.loadedTrackRef === current.track_ref && shouldBeMs >= 0) {
+      this.audio.currentTime = Math.max(0, shouldBeMs / 1_000);
+    }
+    this.render(playback);
+  }
+
   /**
    * 用户手势后补一次起播：autoplay 策略拒绝 play() 的唯一恢复路径。
    * 起播提前量窗口内只保证定时器在位，不提前出声。
    */
   resumeAfterGesture(): void {
+    if (this.personalPaused) {
+      // 用户显式暂停，不因后续手势悄悄恢复。
+      return;
+    }
     const playback = this.playback;
     const current = playback?.current;
     if (!playback || !current || !playback.playing) {

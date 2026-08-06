@@ -2,23 +2,38 @@
  * 房间切换器：Spotify Connect 设备菜单的对应物。
  * 房间 = 共享播放设备；实况（在听人数 / now playing）经 useRooms 共享轮询，
  * 底部栏收起态也能显示房间显示名（不再退回 ID）。受保护房间行内输入凭据。
+ * 底部为房间控制区（controller 可见）：播放/暂停/切歌 + 可 seek 进度条——
+ * 房间级控制与个人收听视图（主播放栏）彻底分离。
  */
-import { useState, type JSX } from 'react';
+import { useEffect, useReducer, useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Popover } from 'radix-ui';
-import { MonitorSpeaker } from 'lucide-react';
+import { MonitorSpeaker, Pause, Play, SkipForward } from 'lucide-react';
 import type { RoomInfo } from '../../api/types';
+import { roomStore } from '../../app/session';
 import { useRooms, useRoomState } from '../hooks';
+import { formatMs } from '../format';
 import { useShell } from '../AppShell';
+import { positionOf } from './PlayerBar';
 
 export function RoomSwitcher(): JSX.Element {
   const { t } = useTranslation();
   const state = useRoomState();
-  const { roomsOpen, setRoomsOpen, joinRoom, leaveRoom } = useShell();
+  const { canControl, roomsOpen, setRoomsOpen, joinRoom, leaveRoom } = useShell();
   const rooms = useRooms();
   const [credRoomId, setCredRoomId] = useState<string | null>(null);
   const [credInput, setCredInput] = useState('');
   const [joining, setJoining] = useState(false);
+  // 弹窗内进度条 1s 重算（与 PlayerBar 同款）
+  const [, forceTick] = useReducer((x: number) => x + 1, 0);
+  useEffect(() => {
+    const id = setInterval(forceTick, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const current = state.playback.current;
+  const pos = current ? positionOf(state.playback) : 0;
+  const pct = current && current.duration_ms > 0 ? (pos / current.duration_ms) * 100 : 0;
 
   const tryJoin = async (room: RoomInfo, password?: string) => {
     if (joining) return;
@@ -136,6 +151,65 @@ export function RoomSwitcher(): JSX.Element {
               );
             })}
           </div>
+          {/* 房间控制区：controller 专属；与主播放栏的个人收听视图分离 */}
+          {canControl && current && (
+            <div className="mt-1 border-t border-hairline px-2.5 pt-2.5 pb-1.5">
+              <div className="pb-1.5 font-mono text-[11px] tracking-[0.14em] text-faint">
+                {t('shell.roomControls')}
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[13px]">{current.title}</div>
+                  <div className="truncate text-[11px] text-muted">{current.artist}</div>
+                </div>
+                <div className="flex flex-none items-center gap-1">
+                  <button
+                    type="button"
+                    title={state.playback.playing ? t('room.pause') : t('room.resume')}
+                    onClick={() =>
+                      void (state.playback.playing ? roomStore.pause() : roomStore.resume()).catch(
+                        () => {},
+                      )
+                    }
+                    className="grid h-8 w-8 place-items-center rounded-full bg-accent text-on-accent hover:brightness-105"
+                  >
+                    {state.playback.playing ? (
+                      <Pause className="h-4 w-4 fill-current" />
+                    ) : (
+                      <Play className="ml-0.5 h-4 w-4 fill-current" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    title={t('room.skip')}
+                    onClick={() => void roomStore.skip().catch(() => {})}
+                    className="grid h-8 w-8 place-items-center rounded-full text-muted hover:bg-[var(--hover)] hover:text-paper"
+                  >
+                    <SkipForward className="h-4 w-4 fill-current" />
+                  </button>
+                </div>
+              </div>
+              <div className="mt-2 flex items-center gap-2">
+                <span className="flex-none font-mono text-[10.5px] text-muted tabular-nums">
+                  {formatMs(pos)}
+                </span>
+                <div
+                  className="h-[3px] flex-1 cursor-pointer overflow-hidden rounded bg-[var(--rail)]"
+                  onClick={(e) => {
+                    if (current.duration_ms <= 0) return;
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const ratio = (e.clientX - rect.left) / rect.width;
+                    void roomStore.seek(Math.round(ratio * current.duration_ms)).catch(() => {});
+                  }}
+                >
+                  <div className="progress-glide h-full rounded bg-accent" style={{ width: `${pct}%` }} />
+                </div>
+                <span className="flex-none font-mono text-[10.5px] text-muted tabular-nums">
+                  {formatMs(current.duration_ms)}
+                </span>
+              </div>
+            </div>
+          )}
           {currentId && (
             <button
               type="button"

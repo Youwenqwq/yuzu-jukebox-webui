@@ -7,8 +7,9 @@
 import { useEffect, useReducer, useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DropdownMenu } from 'radix-ui';
-import { Heart, ListMusic, Pause, Play, Plus, SkipForward } from 'lucide-react';
-import { api, client, roomStore } from '../../app/session';
+import { Heart, ListMusic, Pause, Play, Plus } from 'lucide-react';
+import { api, client } from '../../app/session';
+import { audio, renderer } from '../../app/player';
 import type { AccountPlaylist } from '../../api/types';
 import type { Playback } from '../../protocol/types';
 import { parseLrc, type LyricLine } from '../../player/lyrics';
@@ -98,7 +99,7 @@ function AddToAccountPlaylist({ providerId, trackId }: { providerId: string; tra
 }
 
 /** 由五元组 + 校时时钟推算"此刻应该放到哪"（spec §2.2）；负值窗口渲染前钳到 0。 */
-function positionOf(playback: Playback): number {
+export function positionOf(playback: Playback): number {
   const current = playback.current;
   if (!current) return 0;
   const shouldBe = playback.playing
@@ -110,7 +111,7 @@ function positionOf(playback: Playback): number {
 export function PlayerBar(): JSX.Element {
   const { t } = useTranslation();
   const state = useRoomState();
-  const { canControl, nameOf, queueOpen, setQueueOpen, setRoomsOpen } = useShell();
+  const { nameOf, queueOpen, setQueueOpen, setRoomsOpen } = useShell();
   const providers = useProviders();
   const { show, showError } = useToast();
   const [playerOpen, setPlayerOpen] = useState(false);
@@ -151,7 +152,15 @@ export function PlayerBar(): JSX.Element {
 
   const playback = state.playback;
   const current = playback.current;
-  const pos = positionOf(playback);
+  // 个人暂停（前端暂停）：仅本客户端静默，房间继续播放；恢复时对齐房间位置。
+  const [personalPaused, setPersonalPaused] = useState(() => renderer.isPersonalPaused);
+  useEffect(() => {
+    // 离房/换房：内核渲染空闲态时清除标志，这里同步按钮态。
+    setPersonalPaused(renderer.isPersonalPaused);
+  }, [state.roomId]);
+  const pos = personalPaused && current
+    ? audio.currentTime * 1_000
+    : positionOf(playback);
   const pct = current && current.duration_ms > 0 ? (pos / current.duration_ms) * 100 : 0;
 
   // 喜欢/加歌单：仅当当前曲目的 provider 凭据归我所有且报告对应能力时出现
@@ -270,59 +279,51 @@ export function PlayerBar(): JSX.Element {
         )}
       </div>
 
-      {/* 中：控制 + 进度 */}
+      {/* 中：进度（统一展示；房间控制已移至房间切换面板） */}
       <div className="flex min-w-0 flex-col items-center gap-1">
         {current && (
           <>
-            <div className="flex items-center gap-2">
-              {canControl && (
-                <>
-                  <button
-                    title={playback.playing ? t('room.pause') : t('room.resume')}
-                    onClick={() =>
-                      void (playback.playing ? roomStore.pause() : roomStore.resume()).catch(() => {})
-                    }
-                    className="grid h-8.5 w-8.5 place-items-center rounded-full bg-accent text-on-accent hover:brightness-105"
-                  >
-                    {playback.playing ? (
-                      <Pause className="h-4 w-4 fill-current" />
-                    ) : (
-                      <Play className="ml-0.5 h-4 w-4 fill-current" />
-                    )}
-                  </button>
-                  <button
-                    title={t('room.skip')}
-                    onClick={() => void roomStore.skip().catch(() => {})}
-                    className="grid h-8.5 w-8.5 place-items-center rounded-full text-muted hover:bg-[var(--hover)] hover:text-paper"
-                  >
-                    <SkipForward className="h-4 w-4 fill-current" />
-                  </button>
-                </>
-              )}
-            </div>
             <div className="flex w-full items-center gap-2.5">
               <span className="flex-none font-mono text-[11px] text-muted tabular-nums">{formatMs(pos)}</span>
-              <div
-                className={`h-[3px] flex-1 overflow-hidden rounded bg-[var(--rail)] ${canControl ? 'cursor-pointer' : ''}`}
-                onClick={(e) => {
-                  if (!canControl || current.duration_ms <= 0) return;
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const ratio = (e.clientX - rect.left) / rect.width;
-                  void roomStore.seek(Math.round(ratio * current.duration_ms)).catch(() => {});
-                }}
-              >
+              <div className="h-[3px] flex-1 overflow-hidden rounded bg-[var(--rail)]">
                 <div className="progress-glide h-full rounded bg-accent" style={{ width: `${pct}%` }} />
               </div>
               <span className="flex-none font-mono text-[11px] text-muted tabular-nums">
                 {formatMs(current.duration_ms)}
               </span>
             </div>
+            {personalPaused && (
+              <p className="text-[10.5px] text-faint">{t('room.personalPausedHint')}</p>
+            )}
           </>
         )}
       </div>
 
-      {/* 右：音量 / 队列 / 房间切换 */}
+      {/* 右：个人暂停 / 音量 / 队列 / 房间切换 */}
       <div className="flex min-w-0 items-center justify-end gap-2">
+        {current && (
+          <button
+            type="button"
+            title={personalPaused ? t('room.personalResume') : t('room.personalPause')}
+            onClick={() => {
+              if (personalPaused) {
+                renderer.resumePersonal();
+              } else {
+                renderer.pausePersonal();
+              }
+              setPersonalPaused(renderer.isPersonalPaused);
+            }}
+            className={`grid h-8.5 w-8.5 flex-none place-items-center rounded-full hover:bg-[var(--hover)] ${
+              personalPaused ? 'text-accent' : 'text-muted hover:text-paper'
+            }`}
+          >
+            {personalPaused ? (
+              <Play className="ml-0.5 h-4 w-4 fill-current" />
+            ) : (
+              <Pause className="h-4 w-4 fill-current" />
+            )}
+          </button>
+        )}
         <VolumeControl className="max-lg:hidden" />
         <button
           type="button"
@@ -341,7 +342,6 @@ export function PlayerBar(): JSX.Element {
       {playerOpen && current && (
         <FullscreenPlayer
           playback={playback}
-          canControl={canControl}
           nameOf={nameOf}
           lines={lyrics}
           lyricsLoading={lyricsLoading}

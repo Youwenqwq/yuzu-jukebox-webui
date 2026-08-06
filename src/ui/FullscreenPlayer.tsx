@@ -1,8 +1,9 @@
 import { useEffect, useReducer, useState, type JSX } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { Pause, Play, SkipForward, X } from 'lucide-react';
-import { roomStore, client } from '../app/session';
+import { X } from 'lucide-react';
+import { client } from '../app/session';
+import { audio, renderer } from '../app/player';
 import type { Playback } from '../protocol/types';
 import type { LyricLine } from '../player/lyrics';
 import { activeLineIndex } from '../player/lyrics';
@@ -14,18 +15,18 @@ import { formatClock, formatMs } from './format';
 type NameOf = (id: string, snapshot?: string) => string;
 
 /**
- * 全屏沉浸播放页（Apple Music 式）：整幅辉光背景、左列封面与操控、右列歌词。
- * 仅在有当前曲目时可进入；ESC 或右上角关闭。
+ * 全屏沉浸播放页（Apple Music 式）：整幅辉光背景、左列封面与收听信息、右列歌词。
+ * 个人收听视图——房间级控制（播放/暂停/切歌/seek）统一在房间切换面板，
+ * 这里只保留个人音量与进度展示。仅在有当前曲目时可进入；ESC 或右上角关闭。
  */
 export function FullscreenPlayer(props: {
   playback: Playback;
-  canControl: boolean;
   nameOf: NameOf;
   lines: LyricLine[] | null;
   lyricsLoading: boolean;
   onClose: () => void;
 }): JSX.Element {
-  const { playback, canControl, nameOf, lines, lyricsLoading, onClose } = props;
+  const { playback, nameOf, lines, lyricsLoading, onClose } = props;
   const { t } = useTranslation();
   const current = playback.current!; // 挂载方保证 current 非空
 
@@ -48,14 +49,14 @@ export function FullscreenPlayer(props: {
   }, [onClose]);
 
   // 起播提前量窗口内推算值为负（本曲还没开始）：钳到 0 再拿去渲染进度条/时间/歌词。
+  // 个人暂停时显示本地停住位置（房间仍在播）。
+  const personalPaused = renderer.isPersonalPaused;
+  const shouldBe = playback.playing
+    ? playback.position_ms + (client.clock.serverNow() - playback.updated_at) * playback.rate
+    : playback.position_ms;
   const pos = Math.max(
     0,
-    Math.min(
-      playback.playing
-        ? playback.position_ms + (client.clock.serverNow() - playback.updated_at) * playback.rate
-        : playback.position_ms,
-      current.duration_ms,
-    ),
+    Math.min(personalPaused ? audio.currentTime * 1_000 : shouldBe, current.duration_ms),
   );
 
   // portal 到 body：任何祖先的 transform/filter/动画都不能影响 fixed 覆盖定位
@@ -111,13 +112,7 @@ export function FullscreenPlayer(props: {
           </div>
 
           <div
-            className="h-[3px] rounded bg-[var(--rail)] overflow-hidden cursor-pointer mt-6"
-            onClick={(e) => {
-              if (!canControl || current.duration_ms <= 0) return;
-              const rect = e.currentTarget.getBoundingClientRect();
-              const ratio = (e.clientX - rect.left) / rect.width;
-              void roomStore.seek(Math.round(ratio * current.duration_ms)).catch(() => {});
-            }}
+            className="h-[3px] rounded bg-[var(--rail)] overflow-hidden mt-6"
           >
             <div
               className="progress-glide h-full bg-accent rounded"
@@ -128,30 +123,11 @@ export function FullscreenPlayer(props: {
             <span>{formatMs(pos)}</span>
             <span>{formatMs(current.duration_ms)}</span>
           </div>
+          {personalPaused && (
+            <p className="mt-2 text-[11px] text-faint">{t('room.personalPausedHint')}</p>
+          )}
 
           <div className="flex items-center gap-2 mt-5">
-            {canControl && (
-              <>
-                <button
-                  title={playback.playing ? t('room.pause') : t('room.resume')}
-                  onClick={() => void (playback.playing ? roomStore.pause() : roomStore.resume()).catch(() => {})}
-                  className="w-10 h-10 grid place-items-center rounded-full bg-accent text-on-accent hover:brightness-105"
-                >
-                  {playback.playing ? (
-                    <Pause className="h-4.5 w-4.5 fill-current" />
-                  ) : (
-                    <Play className="ml-0.5 h-4.5 w-4.5 fill-current" />
-                  )}
-                </button>
-                <button
-                  title={t('room.skip')}
-                  onClick={() => void roomStore.skip().catch(() => {})}
-                  className="w-10 h-10 grid place-items-center rounded-full border border-hairline text-paper hover:border-faint"
-                >
-                  <SkipForward className="h-4.5 w-4.5 fill-current" />
-                </button>
-              </>
-            )}
             <VolumeControl className="ml-2" />
           </div>
         </div>
