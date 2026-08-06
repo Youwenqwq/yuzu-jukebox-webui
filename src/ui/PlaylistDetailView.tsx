@@ -104,7 +104,7 @@ export default function PlaylistDetailView(): JSX.Element {
 
   if (failed) {
     return (
-      <div className="view-enter mx-auto max-w-3xl px-7 pt-7 pb-10">
+      <div className="view-enter mx-auto max-w-3xl px-4 pt-4 pb-10 md:px-7 md:pt-7">
         <p className="text-muted">{t('error.internal')}</p>
       </div>
     );
@@ -112,14 +112,14 @@ export default function PlaylistDetailView(): JSX.Element {
 
   if (!detail) {
     return (
-      <div className="view-enter mx-auto max-w-3xl px-7 pt-7 pb-10">
+      <div className="view-enter mx-auto max-w-3xl px-4 pt-4 pb-10 md:px-7 md:pt-7">
         <p className="text-muted">{t('batch.playlistLoading')}</p>
       </div>
     );
   }
 
   return (
-    <div className="view-enter mx-auto max-w-3xl px-7 pt-7 pb-10">
+    <div className="view-enter mx-auto max-w-3xl px-4 pt-4 pb-10 md:px-7 md:pt-7">
       <div className="mb-6 flex items-end justify-between gap-4">
         <div className="flex min-w-0 items-end gap-4">
           {detail.playlist.cover_url ? (

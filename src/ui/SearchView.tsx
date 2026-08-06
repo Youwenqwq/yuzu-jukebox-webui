@@ -7,7 +7,7 @@
 import { useEffect, useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ChevronRight, Disc3, ListMusic, ListPlus, Radio, User } from 'lucide-react';
+import { ArrowLeft, ChevronRight, Disc3, ListMusic, ListPlus, Radio, Search as SearchIcon, User } from 'lucide-react';
 import type { SearchCategory, SearchEntity, SearchTrack } from '../api/types';
 import { api, roomStore } from '../app/session';
 import { useIdentity, useProviders, useRoomState } from './hooks';
@@ -45,9 +45,11 @@ function trackCover(track: SearchTrack): string {
 export default function SearchView(): JSX.Element {
   const { t } = useTranslation();
   const [params] = useSearchParams();
+  const navigate = useNavigate();
   const providers = useProviders();
   const query = params.get('q')?.trim() ?? '';
   const provider = params.get('p') || localStorage.getItem(SEARCH_PROVIDER_KEY) || 'ncm';
+  const [mobileKeyword, setMobileKeyword] = useState(query);
 
   // 能力报告驱动 chips；未报告分类能力的 provider 只有单曲
   const supported: SearchCategory[] =
@@ -67,7 +69,25 @@ export default function SearchView(): JSX.Element {
   }, [query, provider]);
 
   return (
-    <div className="view-enter mx-auto max-w-5xl px-7 pt-7 pb-10">
+    <div className="view-enter mx-auto max-w-5xl px-4 pt-4 pb-10 md:px-7 md:pt-7">
+      {/* 移动端输入框：顶栏搜索 icon 跳转到这里，页面自带输入（桌面端用顶栏输入框） */}
+      <form
+        className="mb-5 flex items-center gap-2 rounded-full border border-hairline bg-panel px-3.5 py-2 md:hidden"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const q = mobileKeyword.trim();
+          if (q) navigate(`/search?q=${encodeURIComponent(q)}&p=${encodeURIComponent(provider)}`);
+        }}
+      >
+        <SearchIcon className="h-3.5 w-3.5 flex-none text-faint" />
+        <input
+          value={mobileKeyword}
+          onChange={(event) => setMobileKeyword(event.target.value)}
+          placeholder={t('search.placeholder')}
+          className="search-input w-full min-w-0 bg-transparent text-[13px] placeholder:text-faint focus:outline-none"
+        />
+      </form>
+
       <div className="mb-6 flex flex-wrap gap-2">
         {chips.map((chip) => (
           <button

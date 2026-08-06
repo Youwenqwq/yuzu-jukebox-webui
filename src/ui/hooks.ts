@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { ConnStatus } from '../protocol/client';
 import type { ProviderInfo, RoomInfo } from '../api/types';
 import type { RoomState } from '../protocol/store';
@@ -71,6 +71,21 @@ export function useProviders(): ProviderInfo[] | null {
     },
     () => (identityId !== null && providersFor === identityId ? providersCache : null),
   );
+}
+
+// ---------- 响应式断点 ----------
+
+/** 订阅 CSS 媒体查询（纯 CSR）：断点切换重渲染，用于桌面/移动壳互斥。 */
+export function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const mql = window.matchMedia(query);
+    const onChange = (event: MediaQueryListEvent) => setMatches(event.matches);
+    mql.addEventListener('change', onChange);
+    setMatches(mql.matches);
+    return () => mql.removeEventListener('change', onChange);
+  }, [query]);
+  return matches;
 }
 
 // ---------- 房间目录（实况轮询） ----------

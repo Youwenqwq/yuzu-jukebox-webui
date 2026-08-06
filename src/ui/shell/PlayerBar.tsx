@@ -12,7 +12,7 @@ import { api, client } from '../../app/session';
 import { audio, renderer } from '../../app/player';
 import type { AccountPlaylist } from '../../api/types';
 import type { Playback } from '../../protocol/types';
-import { parseLrc, type LyricLine } from '../../player/lyrics';
+import { useLyrics } from '../useLyrics';
 import { useProviders, useRoomState } from '../hooks';
 import { formatMs } from '../format';
 import { FullscreenPlayer } from '../FullscreenPlayer';
@@ -125,30 +125,9 @@ export function PlayerBar(): JSX.Element {
     return () => clearInterval(id);
   }, []);
 
-  // 歌词数据：换曲目重新拉取；全屏播放页消费
-  const [lyrics, setLyrics] = useState<LyricLine[] | null>(null);
-  const [lyricsLoading, setLyricsLoading] = useState(false);
+  // 歌词数据：换曲目重新拉取；全屏播放页消费（共享 useLyrics hook）
   const trackRef = state.playback.current?.track_ref;
-  useEffect(() => {
-    setLyrics(null);
-    if (!trackRef) return;
-    let dead = false;
-    setLyricsLoading(true);
-    api
-      .lyrics(trackRef)
-      .then((res) => {
-        if (!dead) setLyrics(res ? parseLrc(res.lrc, res.tlrc) : []);
-      })
-      .catch(() => {
-        if (!dead) setLyrics([]);
-      })
-      .finally(() => {
-        if (!dead) setLyricsLoading(false);
-      });
-    return () => {
-      dead = true;
-    };
-  }, [trackRef]);
+  const { lines: lyrics, loading: lyricsLoading } = useLyrics(trackRef);
 
   const playback = state.playback;
   const current = playback.current;

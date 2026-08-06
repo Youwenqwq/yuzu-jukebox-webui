@@ -5,14 +5,23 @@ import { initTheme } from './app/theme';
 import { YuzuError } from './protocol/types';
 import LoginView from './ui/LoginView';
 import AppShell from './ui/AppShell';
+import MobileShell from './ui/MobileShell';
 import HomeView from './ui/HomeView';
 import SearchView from './ui/SearchView';
 import PlaylistDetailView from './ui/PlaylistDetailView';
+import LibraryView from './ui/LibraryView';
 import RoomDeepLink from './ui/RoomDeepLink';
 import AdminView from './ui/AdminView';
+import { useMediaQuery } from './ui/hooks';
 import { ToastProvider } from './ui/toast';
 
 initTheme();
+
+/** 同 URL、视图层分离：断点互斥选择桌面壳 / 移动壳，内核单例在壳之上共享。 */
+function ResponsiveShell() {
+  const isDesktop = useMediaQuery('(min-width: 768px)');
+  return isDesktop ? <AppShell /> : <MobileShell />;
+}
 
 type Phase = 'boot' | 'login' | 'ready';
 
@@ -67,10 +76,11 @@ export default function App() {
       ) : (
         <HashRouter>
           <Routes>
-            <Route element={<AppShell />}>
+            <Route element={<ResponsiveShell />}>
               <Route path="/" element={<HomeView />} />
               <Route path="/search" element={<SearchView />} />
               <Route path="/playlist/:playlistId" element={<PlaylistDetailView />} />
+              <Route path="/library" element={<LibraryView />} />
               {/* 旧 /room/:id 链接的兼容入口：同样只承担「切房」动作 */}
               <Route path="/r/:roomId" element={<RoomDeepLink />} />
               <Route path="/room/:roomId" element={<RoomDeepLink />} />

@@ -48,7 +48,7 @@ export function QueueDrawer(): JSX.Element | null {
     // 纵向夹在顶栏与底部播放栏之间：不遮挡两者
     <div
       ref={panelRef}
-      className={`fixed inset-x-0 bottom-18 top-14 z-30 flex flex-col border-t border-l border-r border-hairline bg-panel transition-transform duration-200 md:left-auto md:right-0 md:w-[380px] md:max-w-[92vw] md:top-14 ${
+      className={`fixed inset-x-0 top-14 bottom-18 z-30 flex flex-col border-t border-l border-r border-hairline bg-panel transition-transform duration-200 max-md:bottom-30 md:left-auto md:right-0 md:w-[380px] md:max-w-[92vw] ${
         queueOpen ? 'translate-x-0' : 'translate-x-full'
       }`}
       aria-hidden={!queueOpen}

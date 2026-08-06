@@ -19,7 +19,7 @@ export default function HomeView(): JSX.Element {
   const identity = useIdentity();
 
   return (
-    <div className="view-enter mx-auto max-w-5xl px-7 pt-7 pb-10">
+    <div className="view-enter mx-auto max-w-5xl px-4 pt-4 pb-10 md:px-7 md:pt-7">
       <div className="mb-1.5 font-mono text-[11px] tracking-[0.14em] uppercase text-faint">
         {t('home.eyebrow')}
       </div>
