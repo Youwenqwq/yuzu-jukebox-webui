@@ -9,15 +9,14 @@ import type { LyricLine } from '../player/lyrics';
 import { activeLineIndex } from '../player/lyrics';
 import { extractGlowColors } from './glow';
 import { LyricsPanel } from './LyricsPanel';
-import { VolumeControl } from './VolumeControl';
 import { formatClock, formatMs } from './format';
 
 type NameOf = (id: string, snapshot?: string) => string;
 
 /**
- * 全屏沉浸播放页（Apple Music 式）：整幅辉光背景、左列封面与收听信息、右列歌词。
- * 个人收听视图——房间级控制（播放/暂停/切歌/seek）统一在房间切换面板，
- * 这里只保留个人音量与进度展示。仅在有当前曲目时可进入；ESC 或右上角关闭。
+ * 全屏沉浸播放页：整幅辉光背景 + 封面/歌词。
+ * 桌面两列（左封面信息 + 右歌词）；移动端单视图切换——点击封面歌词淡入、
+ * 再点歌词封面淡入（crossfade）。个人收听视图：房间级控制在房间面板。
  */
 export function FullscreenPlayer(props: {
   playback: Playback;
@@ -32,6 +31,8 @@ export function FullscreenPlayer(props: {
 
   const [, forceTick] = useReducer((x: number) => x + 1, 0);
   const [glow, setGlow] = useState<[string, string] | null>(null);
+  // 移动端视图：封面 ↔ 歌词（点击切换）
+  const [view, setView] = useState<'cover' | 'lyrics'>('cover');
 
   // 进度/歌词高亮 1s 重算；ESC 关闭；打开期间锁定背景滚动
   useEffect(() => {
@@ -59,6 +60,37 @@ export function FullscreenPlayer(props: {
     Math.min(personalPaused ? audio.currentTime * 1_000 : shouldBe, current.duration_ms),
   );
 
+  const grabGlow = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const colors = extractGlowColors(e.currentTarget);
+    if (colors) setGlow(colors);
+  };
+
+  const lyricsBlock = (
+    <>
+      {lyricsLoading || lines === null ? (
+        <p className="text-faint text-sm text-center pt-24">{t('lyrics.loading')}</p>
+      ) : (
+        <LyricsPanel lines={lines} activeIndex={activeLineIndex(lines, pos)} emptyText={t('lyrics.unavailable')} large />
+      )}
+    </>
+  );
+
+  const progressBlock = (
+    <>
+      <div className="h-[3px] rounded bg-[var(--rail)] overflow-hidden">
+        <div
+          className="progress-glide h-full bg-accent rounded"
+          style={{ width: `${current.duration_ms > 0 ? (pos / current.duration_ms) * 100 : 0}%` }}
+        />
+      </div>
+      <div className="flex justify-between font-mono text-[11.5px] text-muted mt-1.5 tabular-nums">
+        <span>{formatMs(pos)}</span>
+        <span>{formatMs(current.duration_ms)}</span>
+      </div>
+      {personalPaused && <p className="mt-2 text-[11px] text-faint">{t('room.personalPausedHint')}</p>}
+    </>
+  );
+
   // portal 到 body：任何祖先的 transform/filter/动画都不能影响 fixed 覆盖定位
   return createPortal(
     <div className="fixed inset-0 z-50 bg-hall overflow-y-auto">
@@ -81,17 +113,81 @@ export function FullscreenPlayer(props: {
         <X className="h-4 w-4" />
       </button>
 
-      <div className="relative min-h-full max-w-6xl mx-auto px-8 py-14 grid gap-14 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] items-center">
-        {/* 左列：封面 + 曲目信息 + 操控 */}
+      {/* 移动端：封面/歌词单视图切换（crossfade，点击互切）。
+          封面在大区上下居中，歌曲信息与进度条贴底部；歌词同样居中。
+          容器撑满视口——fixed 覆盖层上没有外部元素占用，不留底部空隙。 */}
+      <div className="relative mx-auto h-dvh max-w-md px-6 lg:hidden">
+        <div
+          role="button"
+          tabIndex={0}
+          aria-label={t('room.showLyrics')}
+          onClick={() => setView('lyrics')}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setView('lyrics');
+            }
+          }}
+          className={`absolute inset-0 flex flex-col text-center transition-opacity duration-300 ${
+            view === 'cover' ? 'opacity-100' : 'pointer-events-none opacity-0'
+          }`}
+        >
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
+            {current.cover_url ? (
+              <img
+                src={current.cover_url}
+                alt=""
+                onLoad={grabGlow}
+                className="w-56 aspect-square rounded-xl object-cover sm:w-64"
+                style={{ boxShadow: 'var(--cover-shadow)' }}
+              />
+            ) : (
+              <div className="w-56 aspect-square rounded-xl bg-panel-2 sm:w-64" />
+            )}
+          </div>
+          <div className="px-2 pb-9">
+            <h2 className="font-display text-2xl font-semibold leading-tight">{current.title}</h2>
+            <div className="mt-1 text-[13px] text-muted">
+              {current.artist}
+              {current.album && <span className="text-faint"> · {current.album}</span>}
+            </div>
+            <div className="mt-5">
+              {progressBlock}
+            </div>
+          </div>
+        </div>
+
+        <div
+          role="button"
+          tabIndex={0}
+          aria-label={t('room.tapForCover')}
+          onClick={() => setView('cover')}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setView('cover');
+            }
+          }}
+          className={`absolute inset-0 overflow-hidden transition-opacity duration-300 ${
+            view === 'lyrics' ? 'opacity-100' : 'pointer-events-none opacity-0'
+          }`}
+        >
+          {/* 显式高度容器：LyricsPanel 的 ol(h-full) 才能解析高度并自身滚动，
+              scrollIntoView 才会滚到高亮行（其内部 38% 上下留白负责居中）。 */}
+          <div className="h-full px-2 py-12">
+            {lyricsBlock}
+          </div>
+        </div>
+      </div>
+
+      {/* 桌面：两列（左封面信息 + 右歌词） */}
+      <div className="relative hidden min-h-full max-w-6xl mx-auto px-8 py-14 lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] items-center gap-14">
         <div className="max-w-md w-full mx-auto">
           {current.cover_url ? (
             <img
               src={current.cover_url}
               alt=""
-              onLoad={(e) => {
-                const colors = extractGlowColors(e.currentTarget);
-                if (colors) setGlow(colors);
-              }}
+              onLoad={grabGlow}
               className="w-full aspect-square rounded-xl object-cover"
               style={{ boxShadow: 'var(--cover-shadow)' }}
             />
@@ -111,35 +207,11 @@ export function FullscreenPlayer(props: {
             })}
           </div>
 
-          <div
-            className="h-[3px] rounded bg-[var(--rail)] overflow-hidden mt-6"
-          >
-            <div
-              className="progress-glide h-full bg-accent rounded"
-              style={{ width: `${current.duration_ms > 0 ? (pos / current.duration_ms) * 100 : 0}%` }}
-            />
-          </div>
-          <div className="flex justify-between font-mono text-[11.5px] text-muted mt-1.5 tabular-nums">
-            <span>{formatMs(pos)}</span>
-            <span>{formatMs(current.duration_ms)}</span>
-          </div>
-          {personalPaused && (
-            <p className="mt-2 text-[11px] text-faint">{t('room.personalPausedHint')}</p>
-          )}
-
-          <div className="flex items-center gap-2 mt-5">
-            <VolumeControl className="ml-2" />
-          </div>
+          <div className="mt-6">{progressBlock}</div>
         </div>
 
         {/* 右列：歌词 */}
-        <div className="h-[68vh] max-lg:h-[50vh]">
-          {lyricsLoading || lines === null ? (
-            <p className="text-faint text-sm text-center pt-24">{t('lyrics.loading')}</p>
-          ) : (
-            <LyricsPanel lines={lines} activeIndex={activeLineIndex(lines, pos)} emptyText={t('lyrics.unavailable')} large />
-          )}
-        </div>
+        <div className="h-[68vh]">{lyricsBlock}</div>
       </div>
     </div>,
     document.body,

@@ -825,6 +825,7 @@ export const zhCN = {
     personalPausedHint: '已暂停跟随 · 房间仍在播放',
     expand: '全屏播放',
     closePlayer: '关闭全屏',
+    showLyrics: '查看歌词',
     addedToast: '已加入队列 · {{title}}',
     addedBatchToast: '已加入队列 · {{count}} 首',
   },

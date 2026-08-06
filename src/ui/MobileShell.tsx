@@ -5,12 +5,11 @@
  * 管理功能（/admin）按需求不带入移动端。
  */
 import { useTranslation } from 'react-i18next';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet } from 'react-router-dom';
 import { Home, Library, Search } from 'lucide-react';
 import { useConnStatus } from './hooks';
 import { ShellContext } from './shellContext';
 import { useShellState } from './shell/state';
-import ThemeControls from './ThemeControls';
 import { AccountMenu } from './AccountMenu';
 import { MobilePlayerBar } from './MobilePlayerBar';
 import { MobileRoomDialog } from './MobileRoomDialog';
@@ -20,7 +19,6 @@ export default function MobileShell() {
   const { t } = useTranslation();
   const status = useConnStatus();
   const value = useShellState();
-  const navigate = useNavigate();
 
   return (
     <ShellContext.Provider value={value}>
@@ -31,22 +29,13 @@ export default function MobileShell() {
           </div>
         )}
 
-        {/* 移动顶栏：品牌 + 搜索 + 主题 + 账户（管理功能不带入移动端） */}
+        {/* 移动顶栏：品牌 + 账户（搜索在底部 TabBar，主题收进账户菜单，管理不带入移动端） */}
         <header className="flex flex-none items-center gap-2 border-b border-hairline px-3 py-2">
           <span className="flex-none font-display text-[15px] font-semibold">
             Yuzu <em className="font-normal italic text-accent">Jukebox</em>
           </span>
           <div className="flex-1" />
-          <button
-            type="button"
-            title={t('shell.navSearch')}
-            onClick={() => navigate('/search')}
-            className="grid h-8 w-8 place-items-center rounded-full text-muted hover:bg-[var(--hover)] hover:text-paper"
-          >
-            <Search className="h-4 w-4" />
-          </button>
-          <ThemeControls />
-          <AccountMenu onRoomsClick={() => value.setRoomsOpen(true)} />
+          <AccountMenu compact themeInMenu onRoomsClick={() => value.setRoomsOpen(true)} />
         </header>
 
         <main className="min-h-0 flex-1 overflow-y-auto">
