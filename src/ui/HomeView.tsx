@@ -115,16 +115,20 @@ function RadioSection(): JSX.Element | null {
   );
 }
 
-// ---------- 全局热门（跨房间 play_history 聚合） ----------
+// ---------- 全局热门（跨房间 play_history 聚合，分页） ----------
+
+const HOT_PAGE_SIZE = 8;
 
 function HotSection(): JSX.Element | null {
   const { t } = useTranslation();
+  const { showError } = useToast();
   const [hot, setHot] = useState<HotTrack[] | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     let dead = false;
     api
-      .hotTracks(7, 8)
+      .hotTracks(7, HOT_PAGE_SIZE)
       .then((rows) => {
         if (!dead) setHot(rows);
       })
@@ -136,6 +140,16 @@ function HotSection(): JSX.Element | null {
       dead = true;
     };
   }, []);
+
+  const loadMore = () => {
+    if (!hot || loadingMore) return;
+    setLoadingMore(true);
+    api
+      .hotTracks(7, HOT_PAGE_SIZE, hot.length)
+      .then((more) => setHot((current) => [...(current ?? []), ...more]))
+      .catch(showError)
+      .finally(() => setLoadingMore(false));
+  };
 
   if (!hot || hot.length === 0) return null;
 
@@ -152,6 +166,16 @@ function HotSection(): JSX.Element | null {
           />
         ))}
       </div>
+      {hot.length % HOT_PAGE_SIZE === 0 && (
+        <button
+          type="button"
+          onClick={loadMore}
+          disabled={loadingMore}
+          className="mt-3 w-full rounded-md border border-hairline py-2.5 text-xs text-accent hover:bg-panel disabled:opacity-40"
+        >
+          {loadingMore ? t('common.loading') : t('home.loadMore')}
+        </button>
+      )}
     </section>
   );
 }

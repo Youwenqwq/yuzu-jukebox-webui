@@ -91,7 +91,7 @@ export default function SearchView(): JSX.Element {
       {!query && <p className="py-16 text-center text-sm text-muted">{t('searchPage.noQuery')}</p>}
 
       {query && drill !== null && (
-        <EntityDrill provider={provider} drill={drill} onBack={() => setDrill(null)} />
+        <EntityDrill provider={provider} drill={drill} onBack={() => setDrill(null)} onDrill={setDrill} />
       )}
 
       {query &&
@@ -142,7 +142,15 @@ function useEnqueue() {
 
 // ---------- 曲目列表（搜索结果与钻取结果共用） ----------
 
-function TrackList({ tracks }: { tracks: SearchTrack[] }) {
+function TrackList({
+  tracks,
+  onLoadMore,
+  loadingMore = false,
+}: {
+  tracks: SearchTrack[];
+  onLoadMore?: () => void;
+  loadingMore?: boolean;
+}) {
   const { t } = useTranslation();
   const enqueue = useEnqueue();
   const [selectedRefs, setSelectedRefs] = useState<Set<string>>(() => new Set());
@@ -229,25 +237,38 @@ function TrackList({ tracks }: { tracks: SearchTrack[] }) {
             </div>
           );
         })}
+        {onLoadMore && (
+          <button
+            type="button"
+            onClick={onLoadMore}
+            disabled={loadingMore}
+            className="w-full border-t border-hairline py-2.5 text-xs text-accent hover:bg-panel-2 disabled:opacity-40"
+          >
+            {loadingMore ? t('common.loading') : t('searchPage.loadMore')}
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
-// ---------- 单曲结果（真实检索） ----------
+// ---------- 单曲结果（真实检索，分页） ----------
+
+const PAGE_SIZE = 30;
 
 function SongResults({ provider, query }: { provider: string; query: string }) {
   const { t } = useTranslation();
   const { showError } = useToast();
   const [results, setResults] = useState<SearchTrack[] | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     setResults(null);
     let dead = false;
     setBusy(true);
     api
-      .search(provider, query)
+      .search(provider, query, { limit: PAGE_SIZE })
       .then((tracks) => {
         if (!dead) setResults(tracks);
       })
@@ -265,6 +286,16 @@ function SongResults({ provider, query }: { provider: string; query: string }) {
     };
   }, [query, provider, showError]);
 
+  const loadMore = () => {
+    if (!results || loadingMore) return;
+    setLoadingMore(true);
+    api
+      .search(provider, query, { limit: PAGE_SIZE, offset: results.length })
+      .then((more) => setResults((current) => [...(current ?? []), ...more]))
+      .catch(showError)
+      .finally(() => setLoadingMore(false));
+  };
+
   return (
     <section>
       <h2 className="mt-8 mb-3 font-mono text-[11px] tracking-[0.14em] uppercase text-faint first:mt-0">
@@ -272,7 +303,13 @@ function SongResults({ provider, query }: { provider: string; query: string }) {
       </h2>
       {busy && <p className="py-6 text-sm text-muted">{t('common.loading')}</p>}
       {!busy && results?.length === 0 && <p className="py-6 text-sm text-faint">{t('search.empty')}</p>}
-      {!busy && results && results.length > 0 && <TrackList tracks={results} />}
+      {!busy && results && results.length > 0 && (
+        <TrackList
+          tracks={results}
+          onLoadMore={results.length % PAGE_SIZE === 0 ? loadMore : undefined}
+          loadingMore={loadingMore}
+        />
+      )}
     </section>
   );
 }
@@ -301,6 +338,7 @@ function EntitySection({
   const { canRadio, setRoomsOpen } = useShell();
   const [results, setResults] = useState<SearchEntity[] | null>(null);
   const [importBusy, setImportBusy] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const canImport = identity?.roles.includes('media_admin') ?? false;
   // 歌单实体可作电台播放（ncm playlist:<id> / bili fav:<media_id>，无需导入）
@@ -310,7 +348,7 @@ function EntitySection({
     setResults(null);
     let dead = false;
     api
-      .searchCategory(provider, query, category)
+      .searchCategory(provider, query, category, { limit: PAGE_SIZE })
       .then((entities) => {
         if (!dead) setResults(entities);
       })
@@ -321,6 +359,16 @@ function EntitySection({
       dead = true;
     };
   }, [query, provider, category]);
+
+  const loadMore = () => {
+    if (!results || loadingMore) return;
+    setLoadingMore(true);
+    api
+      .searchCategory(provider, query, category, { limit: PAGE_SIZE, offset: results.length })
+      .then((more) => setResults((current) => [...(current ?? []), ...more]))
+      .catch(showError)
+      .finally(() => setLoadingMore(false));
+  };
 
   if (results === null || results.length === 0) return null;
 
@@ -458,6 +506,16 @@ function EntitySection({
             </div>
           );
         })}
+        {results.length % PAGE_SIZE === 0 && (
+          <button
+            type="button"
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="w-full border-t border-hairline py-2.5 text-xs text-accent hover:bg-panel-2 disabled:opacity-40"
+          >
+            {loadingMore ? t('common.loading') : t('searchPage.loadMore')}
+          </button>
+        )}
       </div>
     </section>
   );
@@ -481,7 +539,7 @@ function TopArtistResult({
     setTop(null);
     let dead = false;
     api
-      .searchCategory(provider, query, 'artist')
+      .searchCategory(provider, query, 'artist', { limit: 1 })
       .then((entities) => {
         if (!dead) setTop(entities.find((e) => e.entity_id) ?? null);
       })
@@ -528,25 +586,128 @@ function TopArtistResult({
 
 // ---------- 实体钻取（artist/album → Spotify 式艺人/专辑页） ----------
 
+/** 歌手页「专辑」区块：into=albums 实体列表，点击再钻到专辑曲目（终点归一）。 */
+function AlbumGrid({
+  provider,
+  artistId,
+  onDrill,
+}: {
+  provider: string;
+  artistId: string;
+  onDrill: (target: DrillTarget) => void;
+}) {
+  const { t } = useTranslation();
+  const { showError } = useToast();
+  const [albums, setAlbums] = useState<SearchEntity[] | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  useEffect(() => {
+    setAlbums(null);
+    let dead = false;
+    api
+      .searchEntityAlbums(provider, artistId, { limit: PAGE_SIZE })
+      .then((list) => {
+        if (!dead) setAlbums(list);
+      })
+      .catch(() => {
+        if (!dead) setAlbums([]);
+      });
+    return () => {
+      dead = true;
+    };
+  }, [provider, artistId]);
+
+  const loadMore = () => {
+    if (!albums || loadingMore) return;
+    setLoadingMore(true);
+    api
+      .searchEntityAlbums(provider, artistId, { limit: PAGE_SIZE, offset: albums.length })
+      .then((more) => setAlbums((current) => [...(current ?? []), ...more]))
+      .catch(showError)
+      .finally(() => setLoadingMore(false));
+  };
+
+  if (albums === null) return <p className="py-6 text-sm text-muted">{t('common.loading')}</p>;
+  if (albums.length === 0) return <p className="py-6 text-sm text-faint">{t('search.empty')}</p>;
+
+  return (
+    <div>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {albums.map((album) => (
+          <button
+            key={album.entity_id ?? album.name}
+            type="button"
+            disabled={!album.entity_id}
+            onClick={() =>
+              onDrill({
+                type: 'album',
+                id: album.entity_id!,
+                name: album.name ?? '',
+                coverUrl: album.cover_url,
+                detail: album.detail,
+              })
+            }
+            className="group rounded-lg border border-hairline bg-panel p-3 text-left transition-colors hover:border-accent hover:bg-panel-2 disabled:opacity-40"
+          >
+            {album.cover_url ? (
+              <img
+                src={coverSrc(album.cover_url)}
+                alt=""
+                className="aspect-square w-full rounded object-cover"
+              />
+            ) : (
+              <span className="grid aspect-square w-full place-items-center rounded bg-panel-2 text-faint">
+                <Disc3 className="h-8 w-8" />
+              </span>
+            )}
+            <div className="mt-2 truncate text-[13px] font-medium">{album.name}</div>
+            {album.detail && <div className="mt-0.5 truncate text-[11px] text-faint">{album.detail}</div>}
+          </button>
+        ))}
+      </div>
+      {albums.length % PAGE_SIZE === 0 && (
+        <button
+          type="button"
+          onClick={loadMore}
+          disabled={loadingMore}
+          className="mt-3 w-full rounded-md border border-hairline py-2.5 text-xs text-accent hover:bg-panel disabled:opacity-40"
+        >
+          {loadingMore ? t('common.loading') : t('searchPage.loadMore')}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function EntityDrill({
   provider,
   drill,
   onBack,
+  onDrill,
 }: {
   provider: string;
   drill: DrillTarget;
   onBack: () => void;
+  onDrill: (target: DrillTarget) => void;
 }) {
   const { t } = useTranslation();
   const { showError } = useToast();
   const enqueue = useEnqueue();
+  const providers = useProviders();
   const [tracks, setTracks] = useState<SearchTrack[] | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  // 歌手页视图：热门曲目 / 专辑（后者仅当 provider 报告 entity_albums 能力）
+  const supportsAlbums =
+    drill.type === 'artist' &&
+    (providers?.find((p) => p.id === provider)?.capabilities?.entity_albums ?? false);
+  const [view, setView] = useState<'tracks' | 'albums'>('tracks');
 
   useEffect(() => {
     setTracks(null);
+    setView('tracks');
     let dead = false;
     api
-      .searchEntity(provider, drill.type, drill.id)
+      .searchEntity(provider, drill.type, drill.id, { limit: PAGE_SIZE })
       .then((list) => {
         if (!dead) setTracks(list);
       })
@@ -560,6 +721,16 @@ function EntityDrill({
       dead = true;
     };
   }, [provider, drill, showError]);
+
+  const loadMore = () => {
+    if (!tracks || loadingMore) return;
+    setLoadingMore(true);
+    api
+      .searchEntity(provider, drill.type, drill.id, { limit: PAGE_SIZE, offset: tracks.length })
+      .then((more) => setTracks((current) => [...(current ?? []), ...more]))
+      .catch(showError)
+      .finally(() => setLoadingMore(false));
+  };
 
   return (
     <section>
@@ -609,12 +780,45 @@ function EntityDrill({
         </div>
       </div>
 
-      <h3 className="mb-3 font-mono text-[11px] tracking-[0.14em] uppercase text-faint">
-        {t(drill.type === 'artist' ? 'searchPage.popularTracks' : 'searchPage.tracksTitle')}
-      </h3>
-      {tracks === null && <p className="py-6 text-sm text-muted">{t('common.loading')}</p>}
-      {tracks?.length === 0 && <p className="py-6 text-sm text-faint">{t('search.empty')}</p>}
-      {tracks && tracks.length > 0 && <TrackList tracks={tracks} />}
+      {supportsAlbums && (
+        <div className="mb-4 flex gap-1 border-b border-hairline">
+          {(['tracks', 'albums'] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setView(v)}
+              className={`-mb-px border-b-2 px-3.5 py-2 text-[13.5px] transition-colors ${
+                view === v
+                  ? 'border-accent text-paper'
+                  : 'border-transparent text-muted hover:text-paper'
+              }`}
+            >
+              {t(v === 'tracks' ? 'searchPage.popularTracks' : 'searchPage.albumsTab')}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {view === 'albums' ? (
+        <AlbumGrid provider={provider} artistId={drill.id} onDrill={onDrill} />
+      ) : (
+        <>
+          {!supportsAlbums && (
+            <h3 className="mb-3 font-mono text-[11px] tracking-[0.14em] uppercase text-faint">
+              {t(drill.type === 'artist' ? 'searchPage.popularTracks' : 'searchPage.tracksTitle')}
+            </h3>
+          )}
+          {tracks === null && <p className="py-6 text-sm text-muted">{t('common.loading')}</p>}
+          {tracks?.length === 0 && <p className="py-6 text-sm text-faint">{t('search.empty')}</p>}
+          {tracks && tracks.length > 0 && (
+            <TrackList
+              tracks={tracks}
+              onLoadMore={tracks.length % PAGE_SIZE === 0 ? loadMore : undefined}
+              loadingMore={loadingMore}
+            />
+          )}
+        </>
+      )}
     </section>
   );
 }

@@ -372,8 +372,14 @@ export class ApiClient {
     return asList(result.stats);
   }
 
-  async search(provider: string, q: string): Promise<SearchTrack[]> {
+  async search(
+    provider: string,
+    q: string,
+    opts: { limit?: number; offset?: number } = {},
+  ): Promise<SearchTrack[]> {
     const query = new URLSearchParams({ provider, q });
+    if (opts.limit !== undefined) query.set('limit', String(opts.limit));
+    if (opts.offset !== undefined) query.set('offset', String(opts.offset));
     const result = await this.#json<{ tracks: SearchTrack[] | null }>(`/api/v1/search?${query}`);
     return asList(result.tracks);
   }
@@ -383,28 +389,49 @@ export class ApiClient {
     provider: string,
     q: string,
     category: SearchCategory,
+    opts: { limit?: number; offset?: number } = {},
   ): Promise<SearchEntity[]> {
     const query = new URLSearchParams({ provider, q, category });
+    if (opts.limit !== undefined) query.set('limit', String(opts.limit));
+    if (opts.offset !== undefined) query.set('offset', String(opts.offset));
     const result = await this.#json<{ results: SearchEntity[] | null }>(`/api/v1/search?${query}`);
     return asList(result.results);
   }
 
-  /** 实体钻取：artist/album 展开为可入队 Track 列表。 */
+  /** 实体钻取（into=tracks）：artist/album 展开为可入队 Track（分页）。 */
   async searchEntity(
     provider: string,
     category: 'artist' | 'album',
     id: string,
+    opts: { limit?: number; offset?: number } = {},
   ): Promise<SearchTrack[]> {
     const query = new URLSearchParams({ provider, category, id });
+    if (opts.limit !== undefined) query.set('limit', String(opts.limit));
+    if (opts.offset !== undefined) query.set('offset', String(opts.offset));
     const result = await this.#json<{ tracks: SearchTrack[] | null }>(
       `/api/v1/search/entity?${query}`,
     );
     return asList(result.tracks);
   }
 
+  /** 歌手专辑列表（into=albums）：返回专辑实体，可再以 category=album 钻曲目。 */
+  async searchEntityAlbums(
+    provider: string,
+    artistId: string,
+    opts: { limit?: number; offset?: number } = {},
+  ): Promise<SearchEntity[]> {
+    const query = new URLSearchParams({ provider, category: 'artist', id: artistId, into: 'albums' });
+    if (opts.limit !== undefined) query.set('limit', String(opts.limit));
+    if (opts.offset !== undefined) query.set('offset', String(opts.offset));
+    const result = await this.#json<{ results: SearchEntity[] | null }>(
+      `/api/v1/search/entity?${query}`,
+    );
+    return asList(result.results);
+  }
+
   /** 全局热门曲目（跨房间聚合，requester）。 */
-  async hotTracks(days = 7, limit = 20): Promise<HotTrack[]> {
-    const query = new URLSearchParams({ days: String(days), limit: String(limit) });
+  async hotTracks(days = 7, limit = 20, offset = 0): Promise<HotTrack[]> {
+    const query = new URLSearchParams({ days: String(days), limit: String(limit), offset: String(offset) });
     const result = await this.#json<{ tracks: HotTrack[] | null }>(`/api/v1/stats/hot?${query}`);
     return asList(result.tracks);
   }

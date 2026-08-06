@@ -123,6 +123,8 @@ export interface ProviderCapabilities {
   account_write?: string[];
   radio_sources?: RadioSourceInfo[];
   search_categories?: SearchCategory[];
+  /** 歌手钻取支持 into=albums（专辑列表，可再钻曲目）；缺失 = 不支持 */
+  entity_albums?: boolean;
 }
 
 export interface ProviderInfo {
