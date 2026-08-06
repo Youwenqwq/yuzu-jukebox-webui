@@ -304,7 +304,7 @@ function TopBar() {
             <DropdownMenu.Content
               align="start"
               sideOffset={8}
-              className="z-50 min-w-28 rounded-lg border border-hairline bg-panel-2 p-1.5"
+              className="menu-content z-50 min-w-28 rounded-lg border border-hairline bg-panel-2 p-1.5"
             >
               {providers.map((id) => (
                 <DropdownMenu.Item
@@ -366,7 +366,7 @@ function AccountMenu() {
           <DropdownMenu.Content
             align="end"
             sideOffset={8}
-            className="z-50 w-44 rounded-lg border border-hairline bg-panel-2 p-1.5"
+            className="menu-content z-50 w-44 rounded-lg border border-hairline bg-panel-2 p-1.5"
           >
             {identity.kind === 'oidc' && (
               <DropdownMenu.Item className={itemClass} onSelect={() => setBindingOpen(true)}>

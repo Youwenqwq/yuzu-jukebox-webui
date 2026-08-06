@@ -58,7 +58,7 @@ function AddToAccountPlaylist({ providerId, trackId }: { providerId: string; tra
           align="start"
           side="top"
           sideOffset={8}
-          className="z-50 w-56 rounded-lg border border-hairline bg-panel-2 p-1.5"
+          className="menu-content z-50 w-56 rounded-lg border border-hairline bg-panel-2 p-1.5"
         >
           <div className="px-2.5 pt-1 pb-1.5 font-mono text-[11px] tracking-[0.14em] text-faint">
             {t('like.addToPlaylist')}

@@ -2,7 +2,7 @@
  * 队列抽屉：右侧面板，容纳待播队列（拖拽/移除）、点歌面板、听众与电台。
  * 自 RoomView 的右栏迁移而来；portal 到 body，避免祖先 transform 劫持 fixed 定位。
  */
-import { useEffect, useState, type JSX } from 'react';
+import { useEffect, useRef, useState, type JSX } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { GripVertical, X } from 'lucide-react';
@@ -10,7 +10,6 @@ import type { QueueEntry } from '../../protocol/types';
 import { roomStore } from '../../app/session';
 import { useIdentity, useRoomState } from '../hooks';
 import { formatClock, formatMs } from '../format';
-import { BatchAddPanel } from '../BatchAddPanel';
 import { useToast } from '../toast';
 import { useShell } from '../AppShell';
 import { RadioPanel } from './RadioPanel';
@@ -20,22 +19,32 @@ export function QueueDrawer(): JSX.Element | null {
   const state = useRoomState();
   const identity = useIdentity();
   const { canControl, nameOf, queueOpen, setQueueOpen, setRoomsOpen } = useShell();
-  const { show, showError } = useToast();
-  const [searchOpen, setSearchOpen] = useState(false);
+  const { showError } = useToast();
+  const panelRef = useRef<HTMLDivElement | null>(null);
 
-  // ESC 关闭
+  // ESC 或点击面板外部自动收起
   useEffect(() => {
     if (!queueOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setQueueOpen(false);
     };
+    const onPointer = (e: PointerEvent) => {
+      if (!panelRef.current?.contains(e.target as Node)) setQueueOpen(false);
+    };
     document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    // 捕获阶段：确保任何点击（含抽屉内部按钮触发的新 popover）先判定归属
+    document.addEventListener('pointerdown', onPointer, true);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onPointer, true);
+    };
   }, [queueOpen, setQueueOpen]);
 
   return createPortal(
+    // 纵向夹在顶栏与底部播放栏之间：不遮挡两者
     <div
-      className={`fixed inset-y-0 right-0 z-40 flex w-[380px] max-w-[92vw] flex-col border-l border-hairline bg-panel transition-transform duration-200 ${
+      ref={panelRef}
+      className={`fixed inset-x-0 bottom-18 top-14 z-30 flex flex-col border-t border-l border-r border-hairline bg-panel transition-transform duration-200 md:left-auto md:right-0 md:w-[380px] md:max-w-[92vw] md:top-14 ${
         queueOpen ? 'translate-x-0' : 'translate-x-full'
       }`}
       aria-hidden={!queueOpen}
@@ -84,15 +93,7 @@ export function QueueDrawer(): JSX.Element | null {
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto">
-          <div className="border-b border-hairline px-4.5 py-3">
-            <button
-              onClick={() => setSearchOpen((v) => !v)}
-              className="w-full rounded-full bg-accent py-2 text-[13.5px] font-medium text-on-accent hover:brightness-105"
-            >
-              {t('room.addSong')}
-            </button>
-            {searchOpen && <BatchAddPanel onToast={show} onError={showError} />}
-          </div>
+          {/* 点歌入口已统一到顶栏搜索框，这里不再重复 */}
 
           {state.queue.length === 0 ? (
             <p className="px-4.5 py-8 text-center text-sm text-muted">{t('room.queueEmpty')}</p>

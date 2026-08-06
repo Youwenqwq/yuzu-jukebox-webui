@@ -126,6 +126,15 @@ body {
 .pop-enter {
   animation: yuzu-pop-in calc(var(--speed) * 0.8) ease both;
 }
+/* 悬浮菜单/弹窗（DropdownMenu/Popover 内容）：从锚点方向淡入缩放，进出统一 */
+@keyframes yuzu-menu-in {
+  from { opacity: 0; transform: scale(0.96) translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+.menu-content {
+  animation: yuzu-menu-in calc(var(--speed) * 0.8) ease both;
+  transform-origin: var(--radix-dropdown-menu-content-transform-origin, var(--radix-popover-content-transform-origin, top));
+}
 /* 进度条秒间滑行（对齐 1s 校偏节拍） */
 .progress-glide {
   transition: width 1s linear;

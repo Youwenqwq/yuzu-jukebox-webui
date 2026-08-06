@@ -1,44 +1,24 @@
 /**
  * 房间切换器：Spotify Connect 设备菜单的对应物。
- * 房间 = 共享播放设备；弹窗列出全部房间的实况（在听人数 / now playing），
- * 点击即换房。受保护房间在展开的行内输入凭据。
+ * 房间 = 共享播放设备；实况（在听人数 / now playing）经 useRooms 共享轮询，
+ * 底部栏收起态也能显示房间显示名（不再退回 ID）。受保护房间行内输入凭据。
  */
-import { useEffect, useState, type JSX } from 'react';
+import { useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Popover } from 'radix-ui';
 import { MonitorSpeaker } from 'lucide-react';
 import type { RoomInfo } from '../../api/types';
-import { api } from '../../app/session';
-import { useRoomState } from '../hooks';
+import { useRooms, useRoomState } from '../hooks';
 import { useShell } from '../AppShell';
 
 export function RoomSwitcher(): JSX.Element {
   const { t } = useTranslation();
   const state = useRoomState();
   const { roomsOpen, setRoomsOpen, joinRoom, leaveRoom } = useShell();
-  const [rooms, setRooms] = useState<RoomInfo[] | null>(null);
+  const rooms = useRooms();
   const [credRoomId, setCredRoomId] = useState<string | null>(null);
   const [credInput, setCredInput] = useState('');
   const [joining, setJoining] = useState(false);
-
-  // 房间实况来自一次性 REST 快照：弹窗开启期间 5s 轮询保活
-  useEffect(() => {
-    if (!roomsOpen) return;
-    let dead = false;
-    const load = () =>
-      api
-        .listRooms()
-        .then((list) => {
-          if (!dead) setRooms(list);
-        })
-        .catch(() => {});
-    load();
-    const id = setInterval(load, 5000);
-    return () => {
-      dead = true;
-      clearInterval(id);
-    };
-  }, [roomsOpen]);
 
   const tryJoin = async (room: RoomInfo, password?: string) => {
     if (joining) return;
@@ -70,14 +50,16 @@ export function RoomSwitcher(): JSX.Element {
           className="flex min-w-0 max-w-60 items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-muted hover:bg-[var(--hover)] hover:text-paper"
         >
           <MonitorSpeaker className="h-4 w-4 flex-none" />
-          <span className="truncate">
-            {currentId ? (currentRoom?.name ?? currentId) : t('shell.selectRoom')}
-          </span>
-          {currentId && (
-            <span className="flex-none font-mono text-[11px] text-faint">
-              {t('room.listenerCount', { count: state.listeners.length })}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate">
+              {currentId ? (currentRoom?.name ?? currentId) : t('shell.selectRoom')}
             </span>
-          )}
+            {currentId && (
+              <span className="block font-mono text-[10.5px] leading-tight text-faint">
+                {t('room.listenerCount', { count: state.listeners.length })}
+              </span>
+            )}
+          </span>
         </button>
       </Popover.Trigger>
       <Popover.Portal>
@@ -85,7 +67,7 @@ export function RoomSwitcher(): JSX.Element {
           side="top"
           align="end"
           sideOffset={10}
-          className="z-50 w-80 rounded-lg border border-hairline bg-panel-2 p-2"
+          className="menu-content z-50 w-80 rounded-lg border border-hairline bg-panel-2 p-2"
         >
           <div className="px-2.5 pb-1.5 pt-1 font-mono text-[11px] tracking-[0.14em] text-faint">
             {t('shell.roomSwitch')}

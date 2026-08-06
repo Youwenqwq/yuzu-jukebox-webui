@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import type { ConnStatus } from '../protocol/client';
-import type { ProviderInfo } from '../api/types';
+import type { ProviderInfo, RoomInfo } from '../api/types';
 import type { RoomState } from '../protocol/store';
 import type { Identity } from '../protocol/types';
 import { api, client, roomStore, session } from '../app/session';
@@ -70,5 +70,59 @@ export function useProviders(): ProviderInfo[] | null {
       };
     },
     () => (identityId !== null && providersFor === identityId ? providersCache : null),
+  );
+}
+
+// ---------- 房间目录（实况轮询） ----------
+
+// 房间列表是短生命周期实况（listener_count/now_playing 5s 级变化），
+// 且需要跨组件共享（底部栏切换器常显房间显示名，弹窗展开时才有完整列表）。
+// 采用「订阅期间持续轮询」：有订阅者就 5s 刷新，无订阅者即停。
+let roomsCache: RoomInfo[] | null = null;
+let roomsTimer: number | null = null;
+let roomsLoading = false;
+const roomListeners = new Set<() => void>();
+
+function refreshRooms(): void {
+  if (roomsLoading) return;
+  roomsLoading = true;
+  api
+    .listRooms()
+    .then((list) => {
+      roomsCache = list;
+      for (const cb of roomListeners) cb();
+    })
+    .catch(() => {})
+    .finally(() => {
+      roomsLoading = false;
+    });
+}
+
+function startRoomsPolling(): void {
+  if (roomsTimer !== null) return;
+  refreshRooms();
+  roomsTimer = window.setInterval(refreshRooms, 5000);
+}
+
+function stopRoomsPolling(): void {
+  if (roomsTimer === null) return;
+  window.clearInterval(roomsTimer);
+  roomsTimer = null;
+}
+
+/** 房间实况目录：有订阅者时 5s 轮询。null = 首次加载中。 */
+export function useRooms(): RoomInfo[] | null {
+  useEffect(() => {
+    startRoomsPolling();
+    return stopRoomsPolling;
+  }, []);
+  return useSyncExternalStore(
+    (cb) => {
+      roomListeners.add(cb);
+      return () => {
+        roomListeners.delete(cb);
+      };
+    },
+    () => roomsCache,
   );
 }

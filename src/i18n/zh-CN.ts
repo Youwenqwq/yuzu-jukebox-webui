@@ -594,7 +594,7 @@ export const zhCN = {
     selectRoom: '选择房间',
     leaveRoom: '离开当前房间',
     noRoomHint: '还没在任何房间里——选一个房间，和大家一起听',
-    idleHint: '队列空了，点这里加歌',
+    idleHint: '队列空了，去顶栏搜首歌',
     deepLinkJoining: '正在进入房间…',
     deepLinkFailed: '进房失败，房间可能已不存在',
   },
