@@ -24,6 +24,8 @@ export interface Identity {
   name: string;
   kind: IdentityKind;
   roles: Role[];
+  /** OIDC 用户头像链接（IdP picture claim）；guest/password/缺失时无 */
+  avatar?: string;
 }
 
 // ---------- 曲目 ----------

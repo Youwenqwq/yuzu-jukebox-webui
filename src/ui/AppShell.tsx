@@ -19,6 +19,7 @@ import { DropdownMenu } from 'radix-ui';
 import { Check, ChevronDown, History, Link as LinkIcon, ListMusic, LogOut, Search as SearchIcon } from 'lucide-react';
 import { httpBase } from '../config';
 import type { PlaylistInfo } from '../api/types';
+import type { Identity } from '../protocol/types';
 import {
   api,
   getPersistedRoomId,
@@ -340,7 +341,27 @@ function TopBar() {
   );
 }
 
-/** 账户菜单：昵称 + 首字母头像（Identity 无头像字段），操作收进下拉。 */
+/** 账户头像：OIDC avatar 链接可用时直引（外部 CDN，非代理路径），失败/缺失回退首字母。 */
+function AccountAvatar({ identity }: { identity: Identity }) {
+  const [broken, setBroken] = useState(false);
+  if (!identity.avatar || broken) {
+    return (
+      <span className="grid h-7 w-7 flex-none place-items-center rounded-full bg-accent-soft text-xs font-medium text-accent">
+        {identity.name.slice(0, 1).toUpperCase()}
+      </span>
+    );
+  }
+  return (
+    <img
+      src={identity.avatar}
+      alt=""
+      onError={() => setBroken(true)}
+      className="h-7 w-7 flex-none rounded-full object-cover"
+    />
+  );
+}
+
+/** 账户菜单：昵称 + 头像，操作收进下拉。 */
 function AccountMenu() {
   const { t } = useTranslation();
   const identity = useIdentity();
@@ -359,9 +380,7 @@ function AccountMenu() {
             type="button"
             className="flex max-w-40 items-center gap-2 rounded-full border border-hairline py-1 pr-2.5 pl-1 hover:bg-[var(--hover)]"
           >
-            <span className="grid h-7 w-7 flex-none place-items-center rounded-full bg-accent-soft text-xs font-medium text-accent">
-              {identity.name.slice(0, 1).toUpperCase()}
-            </span>
+            <AccountAvatar identity={identity} />
             <span className="truncate text-[13px] text-muted">{identity.name}</span>
             <ChevronDown className="h-3.5 w-3.5 flex-none text-faint" />
           </button>
