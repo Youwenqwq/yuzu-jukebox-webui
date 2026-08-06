@@ -397,7 +397,7 @@ function AccountMenu() {
   );
 }
 
-/** 左侧 Library：品牌（点击回首页）+ 歌单列表（封面占位，等后端歌单封面规范）。 */
+/** 左侧 Library：品牌（点击回首页）+ 歌单列表（封面按后端 cover_url 渲染，缺失占位）。 */
 function Sidebar() {
   const { t } = useTranslation();
   const location = useLocation();
@@ -422,7 +422,7 @@ function Sidebar() {
       <NavLink to="/" className="px-5 py-5 font-display text-xl font-semibold">
         Yuzu <em className="font-normal italic text-accent">Jukebox</em>
       </NavLink>
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-4">
+      <div className="flex min-h-0 flex-1 flex-col px-3 pb-4">
         <div className="px-2 pb-2 font-mono text-[11px] tracking-[0.14em] text-faint">
           {t('shell.library')}
         </div>
@@ -431,7 +431,7 @@ function Sidebar() {
         ) : playlists.length === 0 ? (
           <div className="px-2 py-1 text-[12.5px] text-muted">{t('shell.libraryEmpty')}</div>
         ) : (
-          <nav className="flex flex-col gap-0.5">
+          <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
             {playlists.map((playlist) => (
               <NavLink
                 key={playlist.id}

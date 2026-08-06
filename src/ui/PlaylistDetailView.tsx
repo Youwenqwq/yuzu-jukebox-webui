@@ -27,6 +27,7 @@ export default function PlaylistDetailView(): JSX.Element {
   const [detail, setDetail] = useState<PlaylistDetail | null>(null);
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     setDetail(null);
@@ -47,6 +48,22 @@ export default function PlaylistDetailView(): JSX.Element {
       dead = true;
     };
   }, [playlistId, showError]);
+
+  /** 追加下一页（分页契约：GET /playlists/{id}?offset=&limit=，默认 50/上限 200）。 */
+  const loadMore = () => {
+    if (!detail || loadingMore || detail.items.length >= detail.playlist.track_count) return;
+    setLoadingMore(true);
+    api
+      .getPlaylist(playlistId, detail.items.length, PAGE_SIZE)
+      .then((page) => {
+        setDetail((current) => {
+          if (!current || current.playlist.id !== playlistId) return current;
+          return { ...page, offset: 0, items: [...current.items, ...page.items] };
+        });
+      })
+      .catch(showError)
+      .finally(() => setLoadingMore(false));
+  };
 
   const requireRoom = (): boolean => {
     if (state.roomId) return true;
@@ -168,7 +185,14 @@ export default function PlaylistDetailView(): JSX.Element {
         </div>
       )}
       {detail.items.length < detail.playlist.track_count && (
-        <p className="mt-3 text-center text-[11px] text-faint">{t('playlistDetail.partialHint')}</p>
+        <button
+          type="button"
+          onClick={loadMore}
+          disabled={loadingMore}
+          className="mt-3 w-full rounded-md border border-hairline py-2.5 text-[12.5px] text-accent hover:bg-panel disabled:opacity-40"
+        >
+          {loadingMore ? t('common.loading') : t('playlistDetail.loadMore')}
+        </button>
       )}
     </div>
   );

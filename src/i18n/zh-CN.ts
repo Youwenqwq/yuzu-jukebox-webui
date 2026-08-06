@@ -615,6 +615,7 @@ export const zhCN = {
     hotTitle: '热门',
     statsTitle: '本房热门',
     playCount: '放过 {{count}} 次',
+    loadMore: '加载更多',
     needRoom: '先进入一个房间',
     radioNeedControl: '这个房间的电台由控制者开启',
   },
@@ -637,6 +638,7 @@ export const zhCN = {
     advancedTitle: '高级：直接填曲目源',
   },
   playlistDetail: {
+    loadMore: '加载更多',
     partialHint: '这里只显示前 50 首；「整单入队」会带上全部',
   },
   roomsAdmin: {
@@ -845,6 +847,8 @@ export const zhCN = {
     importAction: '导入为歌单',
     popularTracks: '热门曲目',
     tracksTitle: '曲目',
+    albumsTab: '专辑',
+    loadMore: '加载更多',
     noQuery: '在上方输入关键词，回车开始搜索',
   },
   batch: {
