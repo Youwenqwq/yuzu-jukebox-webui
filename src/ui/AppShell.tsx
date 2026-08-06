@@ -16,7 +16,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { DropdownMenu } from 'radix-ui';
-import { Check, ChevronDown, Link as LinkIcon, ListMusic, LogOut, Search as SearchIcon } from 'lucide-react';
+import { Check, ChevronDown, History, Link as LinkIcon, ListMusic, LogOut, Search as SearchIcon } from 'lucide-react';
 import { httpBase } from '../config';
 import type { PlaylistInfo } from '../api/types';
 import {
@@ -33,6 +33,7 @@ import { YuzuError } from '../protocol/types';
 import { useConnStatus, useIdentity, useRoomState } from './hooks';
 import { coverSrc } from './cover';
 import ExternalBindingDialog from './ExternalBindingDialog';
+import { MyHistoryDialog } from './MyHistoryDialog';
 import ThemeControls from './ThemeControls';
 import { useToast } from './toast';
 import { PlayerBar } from './shell/PlayerBar';
@@ -344,6 +345,7 @@ function AccountMenu() {
   const { t } = useTranslation();
   const identity = useIdentity();
   const [bindingOpen, setBindingOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   if (!identity) return null;
 
   const itemClass =
@@ -376,6 +378,10 @@ function AccountMenu() {
                 {t('lobby.externalBinding')}
               </DropdownMenu.Item>
             )}
+            <DropdownMenu.Item className={itemClass} onSelect={() => setHistoryOpen(true)}>
+              <History className="h-3.5 w-3.5" />
+              {t('lobby.myHistory')}
+            </DropdownMenu.Item>
             <DropdownMenu.Item className={itemClass} onSelect={() => void session.logout()}>
               <LogOut className="h-3.5 w-3.5" />
               {t('lobby.logout')}
@@ -386,6 +392,7 @@ function AccountMenu() {
       {identity.kind === 'oidc' && (
         <ExternalBindingDialog open={bindingOpen} onOpenChange={setBindingOpen} />
       )}
+      <MyHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} />
     </>
   );
 }

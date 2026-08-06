@@ -1,15 +1,15 @@
 /**
- * 首页 = 漫游区：零意图入口。一键电台（provider 源目录驱动）、全局热门、
- * 歌单浏览、本房热门、我最近点的。热门/个人历史要求 requester 角色，
- * 无该角色（或端点拒绝）时对应区块静默隐藏，不造假。
+ * 首页 = 漫游区：一键电台（provider 源目录驱动，改版方向待二次调研）、
+ * 全局热门、本房热门。热门均为封面卡横向展示；歌单已在左侧曲库、
+ * 点歌历史已折叠进账户菜单，不再重复呈现。
  */
 import { useEffect, useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
-import type { HistoryEntry, HotTrack, PlaylistInfo, StatsEntry } from '../api/types';
+import type { HotTrack, StatsEntry } from '../api/types';
 import { api, roomStore } from '../app/session';
 import { useIdentity, useProviders, useRoomState } from './hooks';
-import { formatClock } from './format';
+import { coverSrc } from './cover';
+import { CoverThumb } from './CoverThumb';
 import { composeSource, SOURCE_DESC_KEYS } from './radioSources';
 import { useToast } from './toast';
 import { useShell } from './AppShell';
@@ -29,9 +29,7 @@ export default function HomeView(): JSX.Element {
 
       <RadioSection />
       <HotSection />
-      <PlaylistSection />
       <RoomActivitySections />
-      <MyHistorySection />
     </div>
   );
 }
@@ -144,55 +142,14 @@ function HotSection(): JSX.Element | null {
   return (
     <section>
       <SectionTitle>{t('home.hotTitle')}</SectionTitle>
-      <div className="overflow-hidden rounded-lg border border-hairline bg-panel">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {hot.map((entry) => (
-          <ActivityRow
+          <ActivityCard
             key={entry.track_ref}
             trackRef={entry.track_ref}
             title={entry.title}
             meta={t('home.playCount', { count: entry.play_count })}
           />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-// ---------- 歌单 ----------
-
-function PlaylistSection(): JSX.Element {
-  const { t } = useTranslation();
-  const navigate = useNavigate();
-  const [playlists, setPlaylists] = useState<PlaylistInfo[] | null>(null);
-
-  useEffect(() => {
-    api
-      .listPlaylists()
-      .then(setPlaylists)
-      .catch(() => setPlaylists([]));
-  }, []);
-
-  if (playlists === null || playlists.length === 0) return <></>;
-
-  return (
-    <section>
-      <SectionTitle>{t('home.playlistsTitle')}</SectionTitle>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {playlists.map((playlist) => (
-          <button
-            key={playlist.id}
-            type="button"
-            onClick={() => navigate(`/playlist/${encodeURIComponent(playlist.id)}`)}
-            className="rounded-lg border border-hairline bg-panel px-4 py-4 text-left transition-colors hover:border-faint hover:bg-panel-2"
-          >
-            <div className="truncate font-display text-[15px] font-semibold">{playlist.name}</div>
-            <div className="mt-1 text-xs text-muted">
-              {t('batch.trackCount', { count: playlist.track_count })}
-            </div>
-            {playlist.description && (
-              <div className="mt-1.5 line-clamp-2 text-[11px] text-faint">{playlist.description}</div>
-            )}
-          </button>
         ))}
       </div>
     </section>
@@ -222,9 +179,9 @@ function RoomActivitySections(): JSX.Element | null {
   return (
     <section>
       <SectionTitle>{t('home.statsTitle')}</SectionTitle>
-      <div className="overflow-hidden rounded-lg border border-hairline bg-panel">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {stats.map((entry) => (
-          <ActivityRow
+          <ActivityCard
             key={entry.track_ref}
             trackRef={entry.track_ref}
             title={entry.title}
@@ -236,77 +193,36 @@ function RoomActivitySections(): JSX.Element | null {
   );
 }
 
-// ---------- 我最近点的（跨房间个人历史） ----------
-
-function MyHistorySection(): JSX.Element | null {
-  const { t } = useTranslation();
-  const [history, setHistory] = useState<HistoryEntry[] | null>(null);
-
-  useEffect(() => {
-    let dead = false;
-    api
-      .myHistory(0, 8)
-      .then((rows) => {
-        if (!dead) setHistory(rows);
-      })
-      .catch(() => {
-        // 无 requester 角色等拒绝：区块静默隐藏
-        if (!dead) setHistory([]);
-      });
-    return () => {
-      dead = true;
-    };
-  }, []);
-
-  if (!history || history.length === 0) return null;
-
-  return (
-    <section>
-      <SectionTitle>{t('home.myHistoryTitle')}</SectionTitle>
-      <div className="overflow-hidden rounded-lg border border-hairline bg-panel">
-        {history.map((entry) => (
-          <ActivityRow
-            key={`${entry.track_ref}:${entry.ended_at}`}
-            trackRef={entry.track_ref}
-            title={entry.title}
-            meta={formatClock(entry.ended_at)}
-          />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function ActivityRow({ trackRef, title, meta }: { trackRef: string; title: string; meta: string }) {
+/** 热门条目卡片：封面 + 标题 + 副信息；整卡点击入队。 */
+function ActivityCard({ trackRef, title, meta }: { trackRef: string; title: string; meta: string }) {
   const { t } = useTranslation();
   const { setRoomsOpen } = useShell();
   const { show, showError } = useToast();
   const state = useRoomState();
   return (
-    <div className="group flex items-center gap-3 border-b border-hairline px-4 py-2.5 last:border-b-0 hover:bg-panel-2">
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-[13.5px]">{title}</div>
-        <div className="mt-0.5 text-[11.5px] text-faint">{meta}</div>
-      </div>
-      <button
-        type="button"
-        title={t('search.add')}
-        onClick={() => {
-          if (!state.roomId) {
-            show(t('home.needRoom'));
-            setRoomsOpen(true);
-            return;
-          }
-          void roomStore
-            .addQueue([trackRef])
-            .then(() => show(t('room.addedToast', { title })))
-            .catch(showError);
-        }}
-        className="grid h-7 w-7 flex-none place-items-center rounded-full border border-hairline text-muted opacity-0 transition-opacity hover:border-accent hover:text-accent focus:opacity-100 group-hover:opacity-100"
-      >
-        +
-      </button>
-    </div>
+    <button
+      type="button"
+      title={t('search.add')}
+      onClick={() => {
+        if (!state.roomId) {
+          show(t('home.needRoom'));
+          setRoomsOpen(true);
+          return;
+        }
+        void roomStore
+          .addQueue([trackRef])
+          .then(() => show(t('room.addedToast', { title })))
+          .catch(showError);
+      }}
+      className="group rounded-lg border border-hairline bg-panel p-3 text-left transition-colors hover:border-accent hover:bg-panel-2"
+    >
+      <CoverThumb
+        src={coverSrc(`/api/v1/cover/${encodeURIComponent(trackRef)}`)}
+        className="aspect-square w-full rounded"
+      />
+      <div className="mt-2 truncate text-[13px] font-medium">{title}</div>
+      <div className="mt-0.5 truncate text-[11px] text-faint">{meta}</div>
+    </button>
   );
 }
 
