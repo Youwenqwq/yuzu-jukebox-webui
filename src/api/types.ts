@@ -9,6 +9,8 @@ export interface RoomPolicy {
   max_queue?: number;
   queue_limits?: Record<string, number>;
   member_player_volume?: boolean;
+  /** 电台启停授权："controller"（缺省）| "requester"（任何点歌人可启停） */
+  radio_control?: 'controller' | 'requester';
   /** 服务端权威的其它策略键（本前端不解释，只负责原样往返）。 */
   [key: string]: unknown;
 }
@@ -76,6 +78,8 @@ export interface RoomMutationResult {
 }
 
 export interface HistoryEntry {
+  /** 个人历史（?requester=me）跨房间返回时标识来源房间 */
+  room_id?: string;
   track_ref: string;
   title: string;
   requested_by: string;
@@ -103,9 +107,50 @@ export interface SearchTrack {
   contributors?: Contributor[];
 }
 
+/** 电台源规格（spec §6.2.1）：spec 不含 provider 前缀；finite=false 不适用 shuffle/once。 */
+export interface RadioSourceInfo {
+  spec: string;
+  /** 参数语义，如 "track_id"；空 = 无参 */
+  arg?: string;
+  name?: string;
+  finite: boolean;
+}
+
+export type SearchCategory = 'song' | 'artist' | 'album' | 'playlist';
+
+export interface ProviderCapabilities {
+  /** 账号写白名单子集："play_report" | "like" | "playlist_add" */
+  account_write?: string[];
+  radio_sources?: RadioSourceInfo[];
+  search_categories?: SearchCategory[];
+}
+
 export interface ProviderInfo {
   id: string;
   credential_status?: string;
+  /** 按当前请求 Principal 计算（是否凭据 owner）——不得跨用户缓存。 */
+  owned?: boolean;
+  capabilities?: ProviderCapabilities;
+}
+
+/** 分类检索的判别实体（spec §6.2.2）：type=song 时 track 非空可直接入队。 */
+export interface SearchEntity {
+  type: SearchCategory;
+  track?: SearchTrack;
+  /** 钻取（artist/album）或导入（playlist）键 */
+  entity_id?: string;
+  name?: string;
+  /** 次要文本：专辑歌手 / 歌单曲目数 / UP主签名等 */
+  detail?: string;
+  cover_url?: string;
+}
+
+/** 全局热门条目（跨房间 play_history 聚合；与 queue.add ref 体系兼容）。 */
+export interface HotTrack {
+  track_ref: string;
+  title: string;
+  play_count: number;
+  last_played_at: number;
 }
 
 export interface PlaylistInfo {
@@ -115,6 +160,19 @@ export interface PlaylistInfo {
   created_by: string;
   created_at: number;
   updated_at: number;
+  track_count: number;
+  /** Provider 绑定歌单：跟随外部歌单、yuzu 侧只读（items 变更 409 playlist_bound） */
+  bound_provider?: string;
+  bound_remote_id?: string;
+  last_sync_at?: number;
+  last_sync_error?: string;
+}
+
+/** 凭据账号的歌单（owner 专用枚举，playlist-add 的目标）。 */
+export interface AccountPlaylist {
+  id: string;
+  name: string;
+  cover_url?: string;
   track_count: number;
 }
 
@@ -504,6 +562,8 @@ export interface PlayerCommandResult {
 
 export interface RoomCapabilities {
   controller: boolean;
+  /** 电台启停授权（按 policy.radio_control 推导，spec §4.7） */
+  radio: boolean;
 }
 
 export interface IntegrationInfo {

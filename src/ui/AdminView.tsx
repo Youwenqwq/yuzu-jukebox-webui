@@ -5,19 +5,21 @@ import MediaAdmin from './admin/MediaAdmin';
 import AccelerationAdmin from './admin/AccelerationAdmin';
 import PlayerAdmin from './admin/PlayerAdmin';
 import PlaylistAdmin from './admin/PlaylistAdmin';
+import RoomsAdmin from './admin/RoomsAdmin';
 import { useIdentity } from './hooks';
 import { TabPanel, Tabs } from './primitives';
 /**
- * 全局管理视图：歌单 / 媒体 / 加速资源 / 外部集成 / 播放端。
- * 房间内管理（电台/策略/历史）在 RoomView 就地；全局入口按当前身份角色收敛。
+ * 全局管理视图：房间 / 歌单 / 媒体 / 加速资源 / 外部集成 / 播放端。
+ * 房间治理（建删/策略/授权/输出/历史）集中在此；播放器侧只保留听歌交互。
  */
 export default function AdminView() {
   const { t } = useTranslation();
   const identity = useIdentity();
-  const [tab, setTab] = useState('playlists');
+  const [tab, setTab] = useState('rooms');
   const canManageMedia = identity?.roles.includes('media_admin') ?? false;
   const canManageRooms = identity?.roles.includes('room_admin') ?? false;
   const availableTabs = [
+    ...(canManageRooms ? [{ value: 'rooms', label: t('admin.tabRooms') }] : []),
     ...(canManageMedia
       ? [
           { value: 'playlists', label: t('admin.tabPlaylists') },
@@ -55,6 +57,11 @@ export default function AdminView() {
         </p>
       ) : (
         <Tabs value={activeTab} onValueChange={setTab} tabs={availableTabs}>
+          {canManageRooms && (
+            <TabPanel value="rooms">
+              <RoomsAdmin />
+            </TabPanel>
+          )}
           {canManageMedia && (
             <TabPanel value="playlists">
               <PlaylistAdmin />

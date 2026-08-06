@@ -3,16 +3,13 @@ import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { HistoryEntry, RoomAccessCode, RoomAccessMode, RoomPolicy, StatsEntry } from '../api/types';
 import { mergeRoomPolicy } from '../api/policy';
-import { api, roomStore } from '../app/session';
-import type { RadioState } from '../protocol/types';
+import { api } from '../app/session';
 import { formatDateTime } from './format';
 import { RoomGrantPanel } from './RoomGrantPanel';
 import { RoomOutputPanel } from './RoomOutputPanel';
 import { Select, TabPanel, Tabs } from './primitives';
 import { useToast } from './toast';
 
-const INFINITE_SOURCE_RE = /^(ncm:fm|ncm:simi:|ncm:heart:)/;
-const RADIO_SHORTCUTS = ['ncm:fm', 'ncm:daily'] as const;
 const QUEUE_LIMIT_ROLES = ['guest', 'requester', 'room_admin', 'media_admin'] as const;
 const HISTORY_PAGE = 50;
 const STATS_DEFAULT = 20;
@@ -45,12 +42,10 @@ const END_REASON_KEYS: Record<string, string> = {
 
 export function RoomAdminPanel({
   roomId,
-  radio,
   canManagePolicy,
   requesterNames,
 }: {
   roomId: string;
-  radio: RadioState | null;
   canManagePolicy: boolean;
   requesterNames: ReadonlyMap<string, string>;
 }) {
@@ -68,14 +63,10 @@ export function RoomAdminPanel({
   const [statsExpanded, setStatsExpanded] = useState(false);
   const [historyTab, setHistoryTab] = useState<HistoryTab>('history');
 
-  const [radioSource, setRadioSource] = useState(radio?.source ?? '');
-  const [radioShuffle, setRadioShuffle] = useState(radio?.shuffle ?? false);
-  const [radioOnce, setRadioOnce] = useState(radio?.once ?? false);
-  const [radioBusy, setRadioBusy] = useState<'start' | 'stop' | null>(null);
-
   const [maxQueue, setMaxQueue] = useState('0');
   const [queueLimits, setQueueLimits] = useState<QueueLimitRow[]>([]);
   const [memberPlayerVolume, setMemberPlayerVolume] = useState(false);
+  const [radioControl, setRadioControl] = useState<'controller' | 'requester'>('controller');
   /**
    * 保存策略时的合并基底：本次打开面板时从服务端读到的完整 policy。
    * SetPolicy 是整体替换，基底不能来自可能过期的本地快照（房间快照里没有 policy），
@@ -91,21 +82,6 @@ export function RoomAdminPanel({
   const [accessSaving, setAccessSaving] = useState(false);
   const [accessCode, setAccessCode] = useState<RoomAccessCode | null>(null);
   const [accessCodeLoading, setAccessCodeLoading] = useState(false);
-
-  const infiniteSource = INFINITE_SOURCE_RE.test(radioSource.trim());
-
-  useEffect(() => {
-    if (!radio) return;
-    setRadioSource(radio.source);
-    setRadioShuffle(radio.shuffle);
-    setRadioOnce(radio.once);
-  }, [radio]);
-
-  useEffect(() => {
-    if (!infiniteSource) return;
-    setRadioShuffle(false);
-    setRadioOnce(false);
-  }, [infiniteSource]);
 
   useEffect(() => {
     if (!open) return;
@@ -166,6 +142,7 @@ export function RoomAdminPanel({
             .map(([role, value]) => ({ role: role as QueueLimitRole, value: String(value) })),
         );
         setMemberPlayerVolume(room.policy.member_player_volume ?? false);
+        setRadioControl(room.policy.radio_control === 'requester' ? 'requester' : 'controller');
         setAccessMode(room.guest_access?.mode ?? 'open');
         setAccessPassword('');
         setTrustedRoles((room.guest_access?.trusted_roles ?? []).join(', '));
@@ -302,130 +279,6 @@ export function RoomAdminPanel({
       {open && (
         <div className="border-t border-hairline px-4.5 py-4">
           <div className={`grid gap-4 ${canManagePolicy ? 'xl:grid-cols-2' : ''}`}>
-            <section className="rounded-md border border-hairline bg-panel-2 p-4">
-              <div className="mb-3 flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="font-display text-lg font-semibold">{t('roomAdmin.radioTitle')}</h2>
-                  <p className="mt-0.5 text-xs text-muted">
-                    {radio
-                      ? t('roomAdmin.radioCurrent', { source: radio.source })
-                      : t('roomAdmin.radioInactive')}
-                  </p>
-                </div>
-                {radio && (
-                  <div className="flex flex-wrap justify-end gap-1.5 text-[11px] text-faint">
-                    <span className="rounded-full border border-hairline px-2 py-0.5">
-                      {t('roomAdmin.radioShuffleState', {
-                        state: t(radio.shuffle ? 'roomAdmin.stateOn' : 'roomAdmin.stateOff'),
-                      })}
-                    </span>
-                    <span className="rounded-full border border-hairline px-2 py-0.5">
-                      {t('roomAdmin.radioOnceState', {
-                        state: t(radio.once ? 'roomAdmin.stateOn' : 'roomAdmin.stateOff'),
-                      })}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  if (radio) return; // 电台开启中：单按钮语义，先停再开
-                  const source = radioSource.trim();
-                  if (!source || radioBusy) return;
-                  setRadioBusy('start');
-                  void roomStore
-                    .radioPlay(
-                      source,
-                      INFINITE_SOURCE_RE.test(source) ? false : radioShuffle,
-                      INFINITE_SOURCE_RE.test(source) ? false : radioOnce,
-                    )
-                    .then(() => show(t('roomAdmin.radioStarted')))
-                    .catch(showError)
-                    .finally(() => setRadioBusy(null));
-                }}
-              >
-                <label className="block text-xs text-muted">
-                  {t('roomAdmin.radioSource')}
-                  <input
-                    required
-                    value={radioSource}
-                    onChange={(event) => setRadioSource(event.target.value)}
-                    placeholder={t('roomAdmin.radioSourcePlaceholder')}
-                    className="mt-1.5 w-full rounded-md border border-hairline bg-panel px-3 py-2 text-[13px] placeholder:text-faint"
-                  />
-                </label>
-
-                <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                  <span className="text-[11px] text-faint">{t('roomAdmin.radioShortcuts')}</span>
-                  {RADIO_SHORTCUTS.map((source) => (
-                    <button
-                      key={source}
-                      type="button"
-                      onClick={() => setRadioSource(source)}
-                      className="rounded-full border border-hairline px-2.5 py-1 font-mono text-[11px] text-muted hover:border-faint hover:text-paper"
-                    >
-                      {source}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-[13px]">
-                  <label className={`flex items-center gap-2 ${infiniteSource ? 'text-faint' : 'text-muted'}`}>
-                    <input
-                      type="checkbox"
-                      checked={radioShuffle}
-                      disabled={infiniteSource}
-                      onChange={(event) => setRadioShuffle(event.target.checked)}
-                      className="yuzu-checkbox"
-                    />
-                    {t('roomAdmin.radioShuffle')}
-                  </label>
-                  <label className={`flex items-center gap-2 ${infiniteSource ? 'text-faint' : 'text-muted'}`}>
-                    <input
-                      type="checkbox"
-                      checked={radioOnce}
-                      disabled={infiniteSource}
-                      onChange={(event) => setRadioOnce(event.target.checked)}
-                      className="yuzu-checkbox"
-                    />
-                    {t('roomAdmin.radioOnce')}
-                  </label>
-                </div>
-                {infiniteSource && <p className="mt-2 text-xs text-accent">{t('roomAdmin.radioInfiniteHint')}</p>}
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {radio ? (
-                    <button
-                      type="button"
-                      disabled={radioBusy !== null}
-                      onClick={() => {
-                        if (radioBusy) return;
-                        setRadioBusy('stop');
-                        void roomStore
-                          .radioStop()
-                          .then(() => show(t('roomAdmin.radioStopped')))
-                          .catch(showError)
-                          .finally(() => setRadioBusy(null));
-                      }}
-                      className="rounded-full border border-hairline px-4 py-1.5 text-[13px] text-muted hover:border-[#D05A4E] hover:text-[#D05A4E] disabled:opacity-40"
-                    >
-                      {radioBusy === 'stop' ? t('roomAdmin.radioStopping') : t('roomAdmin.radioStop')}
-                    </button>
-                  ) : (
-                    <button
-                      type="submit"
-                      disabled={!radioSource.trim() || radioBusy !== null}
-                      className="rounded-full bg-accent px-4 py-1.5 text-[13px] font-medium text-on-accent hover:brightness-105 disabled:opacity-40"
-                    >
-                      {radioBusy === 'start' ? t('roomAdmin.radioStarting') : t('roomAdmin.radioStart')}
-                    </button>
-                  )}
-                </div>
-              </form>
-            </section>
-
             {canManagePolicy && (
             <section className="rounded-md border border-hairline bg-panel-2 p-4">
               <h2 className="font-display text-lg font-semibold">{t('roomAdmin.policyTitle')}</h2>
@@ -457,6 +310,7 @@ export function RoomAdminPanel({
                     const policy = mergeRoomPolicy(policyBase, {
                       max_queue: Math.max(0, Math.floor(Number(maxQueue) || 0)),
                       member_player_volume: memberPlayerVolume,
+                      radio_control: radioControl,
                       queue_limits: limits,
                       editable_queue_limit_roles: QUEUE_LIMIT_ROLES,
                     });
@@ -503,6 +357,23 @@ export function RoomAdminPanel({
                         }`}
                       />
                     </button>
+                  </div>
+
+                  <div className="mt-4">
+                    <span className="block text-xs text-muted">{t('roomAdmin.radioControl')}</span>
+                    <Select
+                      value={radioControl}
+                      onValueChange={(value) => setRadioControl(value as 'controller' | 'requester')}
+                      options={[
+                        { value: 'controller', label: t('roomAdmin.radioControlController') },
+                        { value: 'requester', label: t('roomAdmin.radioControlRequester') },
+                      ]}
+                      ariaLabel={t('roomAdmin.radioControl')}
+                      className="mt-1.5 w-full"
+                    />
+                    <span className="mt-1 block text-[11px] text-faint">
+                      {t('roomAdmin.radioControlHint')}
+                    </span>
                   </div>
 
                   <div className="mt-4 flex items-center justify-between gap-3">

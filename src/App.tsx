@@ -4,8 +4,11 @@ import { oidcFlow, session } from './app/session';
 import { initTheme } from './app/theme';
 import { YuzuError } from './protocol/types';
 import LoginView from './ui/LoginView';
-import LobbyView from './ui/LobbyView';
-import RoomView from './ui/RoomView';
+import AppShell from './ui/AppShell';
+import HomeView from './ui/HomeView';
+import SearchView from './ui/SearchView';
+import PlaylistDetailView from './ui/PlaylistDetailView';
+import RoomDeepLink from './ui/RoomDeepLink';
 import AdminView from './ui/AdminView';
 import { ToastProvider } from './ui/toast';
 
@@ -64,8 +67,14 @@ export default function App() {
       ) : (
         <HashRouter>
           <Routes>
-            <Route path="/" element={<LobbyView />} />
-            <Route path="/room/:roomId" element={<RoomView />} />
+            <Route element={<AppShell />}>
+              <Route path="/" element={<HomeView />} />
+              <Route path="/search" element={<SearchView />} />
+              <Route path="/playlist/:playlistId" element={<PlaylistDetailView />} />
+              {/* 旧 /room/:id 链接的兼容入口：同样只承担「切房」动作 */}
+              <Route path="/r/:roomId" element={<RoomDeepLink />} />
+              <Route path="/room/:roomId" element={<RoomDeepLink />} />
+            </Route>
             <Route path="/admin" element={<AdminView />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

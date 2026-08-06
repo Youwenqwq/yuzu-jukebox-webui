@@ -17,10 +17,21 @@ src/
   app/         组合根单例：session.ts(内核装配/身份/断线恢复)、
                player.ts(全局唯一 <audio>+renderer)、theme.ts(主题)、
                mediasession.ts(系统媒体控制)
-  ui/          React 视图：Login/Lobby/Room + toast/glow/hooks/format
+  ui/          React 视图：Login + 播放器外壳（AppShell=登录后常驻骨架，
+               shell/PlayerBar 底部栏、shell/RoomSwitcher 房间切换弹窗、
+               shell/QueueDrawer 队列抽屉、shell/RadioPanel 电台面板；
+               页面=Home 漫游/Search/PlaylistDetail/RoomDeepLink）+ admin/
   i18n/        i18next 初始化 + zh-CN 文案目录
   design/      视觉稿 mockup.html（设计决策的唯一参照）
 ```
+
+交互架构（Phase E 起）：**登录后着陆 = 播放器外壳**，房间是状态而非页面——
+底部栏右侧的房间切换弹窗（Spotify 设备菜单的对应物）承担换房；自动入房
+（localStorage `yuzu-last-room` → 唯一房间 → 未入房空态）；`/r/:id` 深链
+（兼容旧 `/room/:id`）只承担「切房」动作。房间治理（建删/策略/授权/输出/历史）
+集中在 /admin「房间」tab；电台开停留在播放器侧（队列抽屉 RadioPanel）。
+播放接线（renderer.render/Media Session/自动播放解锁/canControl 查询）常驻
+AppShell，页面切换不影响出声。
 
 核心纪律：
 
@@ -102,6 +113,10 @@ pnpm build          # tsc -b + vite build
 - [x] Phase D OIDC 登录 UI（部署由用户自理）：登录页「使用组织账号登录」
       （服务端 OIDC 启用时出现）、PKCE 回调在 App 启动时识别（redirect_uri = 应用根，
       code/state 落在 location.search）、请求携带 Zitadel roles scope、大厅身份区退出登录
+- [x] Phase E 播放器外壳重构：大厅陈列页/房间页 → 常驻外壳（侧导航+底部播放栏+
+      队列抽屉），房间降级为设备式切换弹窗；首页漫游（一键电台卡/歌单浏览/
+      本房热门 stats/最近播放 history）；房间治理迁入 /admin；推荐 feed 与
+      非 controller 开电台为占位符，等后端端点（见服务端 TODO「WebUI 漫游体验配套」）
 
 ## 服务端协同
 

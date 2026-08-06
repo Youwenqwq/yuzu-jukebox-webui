@@ -37,7 +37,9 @@ export default function PlaylistAdmin() {
   const [importPlaylistId, setImportPlaylistId] = useState('');
   const [importSource, setImportSource] = useState('');
   const [importName, setImportName] = useState('');
+  const [importBind, setImportBind] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
+  const [bindActionBusy, setBindActionBusy] = useState(false);
   const [itemActionOrd, setItemActionOrd] = useState<number | null>(null);
   const activePlaylistId = useRef<string | null>(null);
 
@@ -146,29 +148,72 @@ export default function PlaylistAdmin() {
     if ((importMode === 'external' ? !externalReady : !sourceReady) || importBusy) return;
     setImportBusy(true);
     try {
-      const imported = await api.importPlaylist(
-        importMode === 'external'
-          ? {
+      const imported =
+        importMode === 'external' && importBind
+          ? await api.bindPlaylist({
               provider: importProvider.trim(),
               playlist_id: importPlaylistId.trim(),
               name: importName.trim() || undefined,
-            }
-          : {
-              source: importSource.trim(),
-              name: importName.trim() || undefined,
-            },
-      );
+            })
+          : await api.importPlaylist(
+              importMode === 'external'
+                ? {
+                    provider: importProvider.trim(),
+                    playlist_id: importPlaylistId.trim(),
+                    name: importName.trim() || undefined,
+                  }
+                : {
+                    source: importSource.trim(),
+                    name: importName.trim() || undefined,
+                  },
+            );
       setImportOpen(false);
       setImportPlaylistId('');
       setImportSource('');
       setImportName('');
-      show(t('admin.playlist.imported', { name: imported.name }));
+      setImportBind(false);
+      show(
+        importMode === 'external' && importBind
+          ? t('admin.playlist.bound', { name: imported.name })
+          : t('admin.playlist.imported', { name: imported.name }),
+      );
       await loadPlaylists();
       await openPlaylist(imported.id);
     } catch (error: unknown) {
       showError(error);
     } finally {
       setImportBusy(false);
+    }
+  };
+
+  /** 绑定歌单：手动同步 / 解除绑定（只读语义见 spec「Provider 绑定歌单」）。 */
+  const syncBound = async () => {
+    if (!detail || bindActionBusy) return;
+    setBindActionBusy(true);
+    try {
+      await api.syncPlaylist(detail.playlist.id);
+      show(t('admin.playlist.synced'));
+      await openPlaylist(detail.playlist.id);
+      await loadPlaylists();
+    } catch (error: unknown) {
+      showError(error);
+    } finally {
+      setBindActionBusy(false);
+    }
+  };
+
+  const detachBound = async () => {
+    if (!detail || bindActionBusy) return;
+    setBindActionBusy(true);
+    try {
+      await api.detachPlaylist(detail.playlist.id);
+      show(t('admin.playlist.detached'));
+      await openPlaylist(detail.playlist.id);
+      await loadPlaylists();
+    } catch (error: unknown) {
+      showError(error);
+    } finally {
+      setBindActionBusy(false);
     }
   };
 
@@ -235,14 +280,52 @@ export default function PlaylistAdmin() {
               <p className="mt-1 text-sm text-muted">{detail.playlist.description}</p>
             )}
           </div>
-          {detail && (
+          {detail && !detail.playlist.bound_provider && (
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => setAddOpen(true)} className={primaryButtonClass}>
                 {t('admin.playlist.addTracks')}
               </button>
             </div>
           )}
+          {detail?.playlist.bound_provider && (
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void syncBound()}
+                disabled={bindActionBusy}
+                className={primaryButtonClass}
+              >
+                {bindActionBusy ? t('admin.common.working') : t('admin.playlist.syncNow')}
+              </button>
+              <button
+                type="button"
+                onClick={() => void detachBound()}
+                disabled={bindActionBusy}
+                className={secondaryButtonClass}
+              >
+                {t('admin.playlist.detach')}
+              </button>
+            </div>
+          )}
         </div>
+
+        {/* 绑定歌单：只读提示 + 同步状态（失败保留旧快照，原因可见） */}
+        {detail?.playlist.bound_provider && (
+          <div className="mb-4 rounded-md border border-hairline bg-panel px-4 py-3 text-xs text-muted">
+            <span className="text-accent">
+              {t('admin.playlist.boundBadge', { provider: detail.playlist.bound_provider })}
+            </span>
+            <span className="ml-3">{t('admin.playlist.boundReadonly')}</span>
+            {detail.playlist.last_sync_at !== undefined && detail.playlist.last_sync_at > 0 && (
+              <span className="ml-3 text-faint">
+                {t('admin.playlist.lastSync', { time: formatDateTime(detail.playlist.last_sync_at) })}
+              </span>
+            )}
+            {detail.playlist.last_sync_error && (
+              <div className="mt-1.5 text-[#D05A4E]">{detail.playlist.last_sync_error}</div>
+            )}
+          </div>
+        )}
 
         {detailBusy && !detail ? (
           <p className="py-10 text-center text-sm text-faint">{t('common.loading')}</p>
@@ -278,6 +361,8 @@ export default function PlaylistAdmin() {
                           {formatMs(item.duration_ms)}
                         </td>
                         <td className="px-3 py-2.5">
+                          {/* 绑定歌单只读：items 变更会被服务端 409，直接不渲染操作 */}
+                          {!detail.playlist.bound_provider && (
                           <div className="flex justify-end gap-1.5">
                             <button
                               type="button"
@@ -308,6 +393,7 @@ export default function PlaylistAdmin() {
                               {rowBusy ? t('admin.common.working') : t('admin.playlist.removeItem')}
                             </button>
                           </div>
+                          )}
                         </td>
                       </tr>
                     );
@@ -415,6 +501,11 @@ export default function PlaylistAdmin() {
                     >
                       {playlist.name}
                     </button>
+                    {playlist.bound_provider && (
+                      <span className="ml-2 rounded-full border border-hairline px-2 py-0.5 text-[10.5px] text-faint">
+                        {t('admin.playlist.boundBadge', { provider: playlist.bound_provider })}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3 font-mono text-xs tabular-nums text-muted">
                     {playlist.track_count}
@@ -518,6 +609,15 @@ export default function PlaylistAdmin() {
                   className={`${inputClass} mt-1.5`}
                   required
                 />
+              </label>
+              <label className="flex items-center gap-2 text-xs text-muted">
+                <input
+                  type="checkbox"
+                  checked={importBind}
+                  onChange={(event) => setImportBind(event.target.checked)}
+                  className="yuzu-checkbox"
+                />
+                {t('admin.playlist.bindFollow')}
               </label>
             </div>
           ) : (

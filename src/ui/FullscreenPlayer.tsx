@@ -1,6 +1,7 @@
 import { useEffect, useReducer, useState, type JSX } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+import { Pause, Play, SkipForward, X } from 'lucide-react';
 import { roomStore, client } from '../app/session';
 import type { Playback } from '../protocol/types';
 import type { LyricLine } from '../player/lyrics';
@@ -76,7 +77,7 @@ export function FullscreenPlayer(props: {
         title={t('room.closePlayer')}
         className="fixed top-5 right-6 z-10 w-9 h-9 grid place-items-center rounded-full border border-hairline text-muted hover:text-paper hover:border-faint bg-hall/60"
       >
-        ×
+        <X className="h-4 w-4" />
       </button>
 
       <div className="relative min-h-full max-w-6xl mx-auto px-8 py-14 grid gap-14 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] items-center">
@@ -134,16 +135,20 @@ export function FullscreenPlayer(props: {
                 <button
                   title={playback.playing ? t('room.pause') : t('room.resume')}
                   onClick={() => void (playback.playing ? roomStore.pause() : roomStore.resume()).catch(() => {})}
-                  className="w-10 h-10 grid place-items-center rounded-full border border-hairline text-paper hover:border-faint"
+                  className="w-10 h-10 grid place-items-center rounded-full bg-accent text-on-accent hover:brightness-105"
                 >
-                  {playback.playing ? '⏸' : '▶'}
+                  {playback.playing ? (
+                    <Pause className="h-4.5 w-4.5 fill-current" />
+                  ) : (
+                    <Play className="ml-0.5 h-4.5 w-4.5 fill-current" />
+                  )}
                 </button>
                 <button
                   title={t('room.skip')}
                   onClick={() => void roomStore.skip().catch(() => {})}
                   className="w-10 h-10 grid place-items-center rounded-full border border-hairline text-paper hover:border-faint"
                 >
-                  ⏭
+                  <SkipForward className="h-4.5 w-4.5 fill-current" />
                 </button>
               </>
             )}

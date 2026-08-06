@@ -1,5 +1,6 @@
 import { useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Volume2, VolumeX } from 'lucide-react';
 import { audio } from '../app/player';
 
 /** 音量控制：图标按钮（点击 mute/取消静音）+ 滑杆。图标随静音态切换。 */
@@ -16,16 +17,9 @@ export function VolumeControl(props: { className?: string }): JSX.Element {
           audio.muted = !audio.muted;
           setMuted(audio.muted);
         }}
-        className="w-8.5 h-8.5 grid place-items-center rounded-md text-muted hover:text-paper hover:bg-[var(--hover)]"
+        className="grid h-8.5 w-8.5 place-items-center rounded-md text-muted hover:bg-[var(--hover)] hover:text-paper"
       >
-        <svg viewBox="0 0 24 24" className="w-4 h-4">
-          <path d="M11 5 6 9H2v6h4l5 4V5z" fill="currentColor" />
-          {muted ? (
-            <path d="m22 9-6 6M16 9l6 6" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
-          ) : (
-            <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
-          )}
-        </svg>
+        {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
       </button>
       <input
         type="range"
@@ -42,7 +36,7 @@ export function VolumeControl(props: { className?: string }): JSX.Element {
           }
         }}
         title={t('room.volume')}
-        className="w-24"
+        className="w-20"
       />
     </div>
   );

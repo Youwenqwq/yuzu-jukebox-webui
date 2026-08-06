@@ -8,3 +8,4 @@ dist
 .idea/
 coverage/
 .env*
+TODO.md

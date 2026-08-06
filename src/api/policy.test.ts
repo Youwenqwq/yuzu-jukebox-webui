@@ -9,6 +9,7 @@ describe('mergeRoomPolicy', () => {
     const base: RoomPolicy = {
       max_queue: 20,
       member_player_volume: true,
+      radio_control: 'controller',
       start_lead_ms: 900,
       // 将来服务端新增的任何字段走同一条路径，不需要改 UI。
       some_future_knob: { nested: ['value'] },
@@ -17,6 +18,7 @@ describe('mergeRoomPolicy', () => {
     const merged = mergeRoomPolicy(base, {
       max_queue: 30,
       member_player_volume: false,
+      radio_control: 'controller',
       queue_limits: { guest: 3 },
       editable_queue_limit_roles: EDITABLE_ROLES,
     });
@@ -24,6 +26,7 @@ describe('mergeRoomPolicy', () => {
     expect(merged).toEqual({
       max_queue: 30,
       member_player_volume: false,
+      radio_control: 'controller',
       queue_limits: { guest: 3 },
       start_lead_ms: 900,
       some_future_knob: { nested: ['value'] },
@@ -34,6 +37,7 @@ describe('mergeRoomPolicy', () => {
     const base: RoomPolicy = {
       max_queue: 20,
       member_player_volume: true,
+      radio_control: 'controller',
       queue_limits: { guest: 3, requester: 10 },
       start_lead_ms: 0,
     };
@@ -41,6 +45,7 @@ describe('mergeRoomPolicy', () => {
     const merged = mergeRoomPolicy(base, {
       max_queue: 0,
       member_player_volume: false,
+      radio_control: 'controller',
       queue_limits: {},
       editable_queue_limit_roles: EDITABLE_ROLES,
     });
@@ -48,6 +53,7 @@ describe('mergeRoomPolicy', () => {
     expect(merged).toEqual({
       max_queue: 0,
       member_player_volume: false,
+      radio_control: 'controller',
       queue_limits: {},
       start_lead_ms: 0,
     });
@@ -61,6 +67,7 @@ describe('mergeRoomPolicy', () => {
     const merged = mergeRoomPolicy(base, {
       max_queue: 0,
       member_player_volume: false,
+      radio_control: 'controller',
       // requester 行被管理员删掉 → 显式删除；guest 行被改成 5。
       queue_limits: { guest: 5 },
       editable_queue_limit_roles: EDITABLE_ROLES,
@@ -76,6 +83,7 @@ describe('mergeRoomPolicy', () => {
     mergeRoomPolicy(base, {
       max_queue: 5,
       member_player_volume: true,
+      radio_control: 'controller',
       queue_limits: { requester: 1 },
       editable_queue_limit_roles: EDITABLE_ROLES,
     });

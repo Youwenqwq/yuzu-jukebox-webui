@@ -31,9 +31,21 @@ function setIdentity(next: Identity | null): void {
 // ---------- 断线重连后的会话恢复（spec §9.4：重走 auth → join） ----------
 let lastRoom: { id: string; password?: string } | null = null;
 
-/** 由 RoomView 维护：记录/清除当前所在房间，供重连后自动回房。 */
+const LAST_ROOM_KEY = 'yuzu-last-room';
+
+/** 由外壳维护：记录/清除当前所在房间，供重连后自动回房。 */
 export function setLastRoom(room: { id: string; password?: string } | null): void {
   lastRoom = room;
+  if (room) {
+    localStorage.setItem(LAST_ROOM_KEY, room.id);
+  } else {
+    localStorage.removeItem(LAST_ROOM_KEY);
+  }
+}
+
+/** 上次所在房间（跨会话持久化），供外壳自动入房；房间凭据在 roomCredentials 另存。 */
+export function getPersistedRoomId(): string | null {
+  return localStorage.getItem(LAST_ROOM_KEY);
 }
 
 client.onSessionReset(async () => {

@@ -2,6 +2,7 @@ import { httpBase } from '../config';
 import type { AuthOk } from '../protocol/types';
 import { YuzuError } from '../protocol/types';
 import type {
+  AccountPlaylist,
   AddPlaylistItemsResult,
   AccelerationCredentialActivationResult,
   AccelerationCredentialResult,
@@ -20,6 +21,7 @@ import type {
   CredentialResult,
   DeletePlaylistItemResult,
   HistoryEntry,
+  HotTrack,
   ImportPlaylistInput,
   ExternalBindingCode,
   LocalMediaInfo,
@@ -53,6 +55,8 @@ import type {
   RoomOutput,
   RoomOutputUpdate,
   RoomPlayerInfo,
+  SearchCategory,
+  SearchEntity,
   SearchTrack,
   StatsEntry,
   UpdatePlayerInput,
@@ -372,6 +376,111 @@ export class ApiClient {
     const query = new URLSearchParams({ provider, q });
     const result = await this.#json<{ tracks: SearchTrack[] | null }>(`/api/v1/search?${query}`);
     return asList(result.tracks);
+  }
+
+  /** 分类检索（artist/album/playlist）：返回判别实体（spec §6.2.2）。 */
+  async searchCategory(
+    provider: string,
+    q: string,
+    category: SearchCategory,
+  ): Promise<SearchEntity[]> {
+    const query = new URLSearchParams({ provider, q, category });
+    const result = await this.#json<{ results: SearchEntity[] | null }>(`/api/v1/search?${query}`);
+    return asList(result.results);
+  }
+
+  /** 实体钻取：artist/album 展开为可入队 Track 列表。 */
+  async searchEntity(
+    provider: string,
+    category: 'artist' | 'album',
+    id: string,
+  ): Promise<SearchTrack[]> {
+    const query = new URLSearchParams({ provider, category, id });
+    const result = await this.#json<{ tracks: SearchTrack[] | null }>(
+      `/api/v1/search/entity?${query}`,
+    );
+    return asList(result.tracks);
+  }
+
+  /** 全局热门曲目（跨房间聚合，requester）。 */
+  async hotTracks(days = 7, limit = 20): Promise<HotTrack[]> {
+    const query = new URLSearchParams({ days: String(days), limit: String(limit) });
+    const result = await this.#json<{ tracks: HotTrack[] | null }>(`/api/v1/stats/hot?${query}`);
+    return asList(result.tracks);
+  }
+
+  /** 跨房间个人播放历史（requester=me，requester）。 */
+  async myHistory(offset = 0, limit = 50): Promise<HistoryEntry[]> {
+    const query = new URLSearchParams({
+      requester: 'me',
+      offset: String(offset),
+      limit: String(limit),
+    });
+    const result = await this.#json<{ history: HistoryEntry[] | null }>(`/api/v1/history?${query}`);
+    return asList(result.history);
+  }
+
+  /** 凭据 owner 专用：在 Provider 凭据账号上喜欢曲目。trackId 为 provider 原生 id（ref 去前缀）。 */
+  async likeTrack(providerId: string, trackId: string): Promise<void> {
+    await this.#json<{ ok: true }>(`/api/v1/providers/${encodeURIComponent(providerId)}/like`, {
+      method: 'POST',
+      body: JSON.stringify({ track: trackId }),
+    });
+  }
+
+  /** 凭据 owner 专用：回读喜欢状态（now-playing 变化时自查，服务端不广播）。 */
+  async likeCheck(providerId: string, trackId: string): Promise<boolean> {
+    const query = new URLSearchParams({ track: trackId });
+    const result = await this.#json<{ liked: boolean }>(
+      `/api/v1/providers/${encodeURIComponent(providerId)}/like-check?${query}`,
+    );
+    return result.liked;
+  }
+
+  /** 凭据 owner 专用：枚举凭据账号的歌单（playlist-add 目标）。 */
+  async accountPlaylists(providerId: string): Promise<AccountPlaylist[]> {
+    const result = await this.#json<{ playlists: AccountPlaylist[] | null }>(
+      `/api/v1/providers/${encodeURIComponent(providerId)}/account-playlists`,
+    );
+    return asList(result.playlists);
+  }
+
+  /** 凭据 owner 专用：把曲目加入凭据账号的指定歌单。 */
+  async playlistAddTrack(providerId: string, playlistId: string, trackId: string): Promise<void> {
+    await this.#json<{ ok: true }>(
+      `/api/v1/providers/${encodeURIComponent(providerId)}/playlist-add`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ playlist_id: playlistId, track: trackId }),
+      },
+    );
+  }
+
+  /** media_admin：创建 Provider 绑定歌单并首次同步。 */
+  async bindPlaylist(input: { provider: string; playlist_id: string; name?: string }): Promise<PlaylistInfo> {
+    const result = await this.#json<{ playlist: PlaylistInfo }>('/api/v1/playlists/bind', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+    return result.playlist;
+  }
+
+  /** media_admin：手动同步绑定歌单（失败保留旧快照，原因见 last_sync_error）。 */
+  async syncPlaylist(id: string): Promise<PlaylistInfo> {
+    const result = await this.#json<{ playlist: PlaylistInfo }>(
+      `/api/v1/playlists/${encodeURIComponent(id)}/sync`,
+      { method: 'POST' },
+    );
+    return result.playlist;
+  }
+
+  /** media_admin：解除绑定、保留当前条目，转为普通歌单。 */
+  async detachPlaylist(id: string): Promise<PlaylistInfo> {
+    const result = await this.#json<{ playlist: PlaylistInfo }>(
+      `/api/v1/playlists/${encodeURIComponent(id)}/detach`,
+      { method: 'POST' },
+    );
+    return result.playlist;
   }
 
   async listProviders(): Promise<ProviderInfo[]> {

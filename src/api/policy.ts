@@ -10,6 +10,8 @@ import type { RoomPolicy } from './types';
 export interface RoomPolicyEdits {
   max_queue: number;
   member_player_volume: boolean;
+  /** 电台启停授权（spec §4.7） */
+  radio_control: 'controller' | 'requester';
   /** 表单当前列出的角色限额（角色键 → 上限）。 */
   queue_limits: Record<string, number>;
   /** 表单有权编辑的 `queue_limits` 角色键全集（= 角色下拉的选项集合）。 */
@@ -46,6 +48,7 @@ export function mergeRoomPolicy(base: RoomPolicy, edits: RoomPolicyEdits): RoomP
     ...base,
     max_queue: edits.max_queue,
     member_player_volume: edits.member_player_volume,
+    radio_control: edits.radio_control,
     queue_limits: queueLimits,
   };
 }
