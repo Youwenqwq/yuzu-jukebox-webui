@@ -29,7 +29,11 @@ export function QueueDrawer(): JSX.Element | null {
       if (e.key === 'Escape') setQueueOpen(false);
     };
     const onPointer = (e: PointerEvent) => {
-      if (!panelRef.current?.contains(e.target as Node)) setQueueOpen(false);
+      const target = e.target as Node;
+      // 触发按钮的 pointerdown 先于 click 到达：若按空白逻辑先收起，
+      // 随后按钮 click 的 !queueOpen 会立刻重新展开。触发按钮本身例外。
+      if (target instanceof Element && target.closest('[data-queue-toggle]')) return;
+      if (!panelRef.current?.contains(target)) setQueueOpen(false);
     };
     document.addEventListener('keydown', onKey);
     // 捕获阶段：确保任何点击（含抽屉内部按钮触发的新 popover）先判定归属

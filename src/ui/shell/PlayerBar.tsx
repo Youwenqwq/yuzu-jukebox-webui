@@ -327,6 +327,7 @@ export function PlayerBar(): JSX.Element {
         <button
           type="button"
           title={t('shell.queue')}
+          data-queue-toggle
           onClick={() => setQueueOpen(!queueOpen)}
           className={`grid h-8.5 w-8.5 flex-none place-items-center rounded-md hover:bg-[var(--hover)] ${
             queueOpen ? 'text-accent' : 'text-muted hover:text-paper'
