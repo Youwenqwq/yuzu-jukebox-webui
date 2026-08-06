@@ -10,8 +10,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ChevronRight, Disc3, ListMusic, ListPlus, Radio, User } from 'lucide-react';
 import type { SearchCategory, SearchEntity, SearchTrack } from '../api/types';
 import { api, roomStore } from '../app/session';
-import { httpBase } from '../config';
 import { useIdentity, useProviders, useRoomState } from './hooks';
+import { coverSrc } from './cover';
 import { composeSource, entityRadioSource } from './radioSources';
 import { formatMs } from './format';
 import { useToast } from './toast';
@@ -36,15 +36,8 @@ interface DrillTarget {
 }
 
 /**
- * 封面 src 解析：序列化层已统一改写（b558ed3）——track → `/api/v1/cover/{ref}`，
- * 实体 → `/api/v1/cover/ext/{token}`（HMAC 签发，防 SSRF）。两处兼容：
- * - 根相对路径前缀 httpBase（跨源部署时 API 基址 ≠ 页面源）
- * - track cover_url 为空 = 源站没给封面；回退代理路径让 GetTrack 再试一次
+ * 曲目封面：track.cover_url 为空 = 源站没给封面；回退代理路径让 GetTrack 再试一次。
  */
-function coverSrc(url: string): string {
-  return url.startsWith('/') ? `${httpBase}${url}` : url;
-}
-
 function trackCover(track: SearchTrack): string {
   return coverSrc(track.cover_url || `/api/v1/cover/${encodeURIComponent(track.track_ref)}`);
 }

@@ -100,6 +100,12 @@ body {
   border-radius: 2px;
 }
 
+/* 顶栏搜索框：聚焦反馈由胶囊容器（focus-within 边框）承担，
+   隐藏输入框自身的通用聚焦描边。未分层规则，压过 Tailwind utility。 */
+input.search-input:focus-visible {
+  outline: none;
+}
+
 /* ---------- 动效（prefers-reduced-motion 下全部被下方规则关闭） ---------- */
 @keyframes yuzu-fade-up {
   from { opacity: 0; transform: translateY(6px); }

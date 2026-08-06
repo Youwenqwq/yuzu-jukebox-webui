@@ -161,6 +161,8 @@ export interface PlaylistInfo {
   created_at: number;
   updated_at: number;
   track_count: number;
+  /** 封面（规范未定，预留）：后端一旦下发即按代理路径渲染，缺失时前端占位 */
+  cover_url?: string;
   /** Provider 绑定歌单：跟随外部歌单、yuzu 侧只读（items 变更 409 playlist_bound） */
   bound_provider?: string;
   bound_remote_id?: string;

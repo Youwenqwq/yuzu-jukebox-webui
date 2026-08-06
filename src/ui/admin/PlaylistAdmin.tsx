@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ListMusic } from 'lucide-react';
 import type { PlaylistDetail, PlaylistInfo } from '../../api/types';
 import { api } from '../../app/session';
+import { coverSrc } from '../cover';
 import { formatDateTime, formatMs } from '../format';
 import { ConfirmDialog, Dialog, Select } from '../primitives';
 import { useToast } from '../toast';
@@ -41,6 +43,8 @@ export default function PlaylistAdmin() {
   const [importBusy, setImportBusy] = useState(false);
   const [bindActionBusy, setBindActionBusy] = useState(false);
   const [itemActionOrd, setItemActionOrd] = useState<number | null>(null);
+  const [coverBusy, setCoverBusy] = useState(false);
+  const coverInputRef = useRef<HTMLInputElement | null>(null);
   const activePlaylistId = useRef<string | null>(null);
 
   const loadPlaylists = useCallback(async () => {
@@ -248,6 +252,41 @@ export default function PlaylistAdmin() {
     }
   };
 
+  /** 自建歌单封面：multipart 上传（image/*，≤8MB）；绑定歌单由服务端 409 拒绝。 */
+  const applyCover = async (file: File) => {
+    if (!detail || coverBusy) return;
+    if (file.size > 8 * 1024 * 1024) {
+      show(t('admin.playlist.coverTooLarge'));
+      return;
+    }
+    setCoverBusy(true);
+    try {
+      await api.setPlaylistCover(detail.playlist.id, file);
+      show(t('admin.playlist.coverSet'));
+      await openPlaylist(detail.playlist.id);
+      await loadPlaylists();
+    } catch (error: unknown) {
+      showError(error);
+    } finally {
+      setCoverBusy(false);
+    }
+  };
+
+  const clearCover = async () => {
+    if (!detail || coverBusy) return;
+    setCoverBusy(true);
+    try {
+      await api.clearPlaylistCover(detail.playlist.id);
+      show(t('admin.playlist.coverCleared'));
+      await openPlaylist(detail.playlist.id);
+      await loadPlaylists();
+    } catch (error: unknown) {
+      showError(error);
+    } finally {
+      setCoverBusy(false);
+    }
+  };
+
   const loadMore = async () => {
     if (!detail || loadingMore) return;
     const playlistId = detail.playlist.id;
@@ -272,6 +311,17 @@ export default function PlaylistAdmin() {
           <button type="button" onClick={closeDetail} className="text-[13px] text-muted hover:text-paper">
             {t('admin.playlist.backToList')}
           </button>
+          {detail?.playlist.cover_url ? (
+            <img
+              src={coverSrc(detail.playlist.cover_url)}
+              alt=""
+              className="h-24 w-24 flex-none rounded-lg object-cover"
+            />
+          ) : (
+            <span className="grid h-24 w-24 flex-none place-items-center rounded-lg bg-panel-2 text-faint">
+              <ListMusic className="h-8 w-8" />
+            </span>
+          )}
           <div className="min-w-0 flex-1">
             <h2 className="font-display text-2xl font-semibold">
               {detail?.playlist.name ?? t('common.loading')}
@@ -285,6 +335,24 @@ export default function PlaylistAdmin() {
               <button type="button" onClick={() => setAddOpen(true)} className={primaryButtonClass}>
                 {t('admin.playlist.addTracks')}
               </button>
+              <button
+                type="button"
+                onClick={() => coverInputRef.current?.click()}
+                disabled={coverBusy}
+                className={secondaryButtonClass}
+              >
+                {coverBusy ? t('admin.common.working') : t('admin.playlist.setCover')}
+              </button>
+              {detail.playlist.cover_url && (
+                <button
+                  type="button"
+                  onClick={() => void clearCover()}
+                  disabled={coverBusy}
+                  className={secondaryButtonClass}
+                >
+                  {t('admin.playlist.clearCover')}
+                </button>
+              )}
             </div>
           )}
           {detail?.playlist.bound_provider && (
@@ -413,6 +481,19 @@ export default function PlaylistAdmin() {
             </div>
           )
         )}
+
+        {/* 封面文件选择：由「设置封面」按钮触发；选择即上传 */}
+        <input
+          ref={coverInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void applyCover(file);
+            event.target.value = '';
+          }}
+        />
 
         <Dialog open={addOpen} onOpenChange={setAddOpen} title={t('admin.playlist.addDialogTitle')}>
           <form

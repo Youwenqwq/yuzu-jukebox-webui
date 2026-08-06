@@ -84,9 +84,7 @@ export function RoomSwitcher(): JSX.Element {
                     type="button"
                     disabled={joining}
                     onClick={() => void tryJoin(room)}
-                    className={`w-full rounded-md px-2.5 py-2 text-left transition-colors hover:bg-[var(--hover)] ${
-                      isCurrent ? 'shadow-[inset_2px_0_0_var(--accent)]' : ''
-                    }`}
+                    className={`w-full rounded-md px-2.5 py-2 text-left transition-colors hover:bg-[var(--hover)]`}
                   >
                     <div className="flex items-baseline gap-2">
                       <span className={`truncate text-[13.5px] ${isCurrent ? 'text-accent' : ''}`}>

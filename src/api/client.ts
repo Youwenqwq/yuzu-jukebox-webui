@@ -456,6 +456,23 @@ export class ApiClient {
     );
   }
 
+  /** media_admin：设置自建歌单封面（multipart image/*，≤8MB）；绑定歌单 409。 */
+  async setPlaylistCover(id: string, file: Blob): Promise<{ cover_url: string }> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.#json<{ cover_url: string }>(`/api/v1/playlists/${encodeURIComponent(id)}/cover`, {
+      method: 'PUT',
+      body: form,
+    });
+  }
+
+  /** media_admin：清除自建歌单封面；绑定歌单 409。 */
+  async clearPlaylistCover(id: string): Promise<void> {
+    await this.#json<{ ok: true }>(`/api/v1/playlists/${encodeURIComponent(id)}/cover`, {
+      method: 'DELETE',
+    });
+  }
+
   /** media_admin：创建 Provider 绑定歌单并首次同步。 */
   async bindPlaylist(input: { provider: string; playlist_id: string; name?: string }): Promise<PlaylistInfo> {
     const result = await this.#json<{ playlist: PlaylistInfo }>('/api/v1/playlists/bind', {

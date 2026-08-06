@@ -5,8 +5,10 @@
 import { useEffect, useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
+import { ListMusic } from 'lucide-react';
 import type { PlaylistDetail } from '../api/types';
 import { api, roomStore } from '../app/session';
+import { coverSrc } from './cover';
 import { useRoomState } from './hooks';
 import { formatMs } from './format';
 import { useToast } from './toast';
@@ -102,13 +104,26 @@ export default function PlaylistDetailView(): JSX.Element {
   return (
     <div className="view-enter mx-auto max-w-3xl px-7 pt-7 pb-10">
       <div className="mb-6 flex items-end justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="truncate font-display text-3xl font-semibold">{detail.playlist.name}</h1>
-          <div className="mt-1.5 text-[13px] text-muted">
-            {t('batch.trackCount', { count: detail.playlist.track_count })}
-            {detail.playlist.description && (
-              <span className="ml-3 text-faint">{detail.playlist.description}</span>
-            )}
+        <div className="flex min-w-0 items-end gap-4">
+          {detail.playlist.cover_url ? (
+            <img
+              src={coverSrc(detail.playlist.cover_url)}
+              alt=""
+              className="h-24 w-24 flex-none rounded-lg object-cover"
+            />
+          ) : (
+            <span className="grid h-24 w-24 flex-none place-items-center rounded-lg bg-panel-2 text-faint">
+              <ListMusic className="h-8 w-8" />
+            </span>
+          )}
+          <div className="min-w-0">
+            <h1 className="truncate font-display text-3xl font-semibold">{detail.playlist.name}</h1>
+            <div className="mt-1.5 text-[13px] text-muted">
+              {t('batch.trackCount', { count: detail.playlist.track_count })}
+              {detail.playlist.description && (
+                <span className="ml-3 text-faint">{detail.playlist.description}</span>
+              )}
+            </div>
           </div>
         </div>
         <button

@@ -16,8 +16,9 @@ import {
 import { useTranslation } from 'react-i18next';
 import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { DropdownMenu } from 'radix-ui';
-import { Check, ChevronDown, Link as LinkIcon, LogOut, Search as SearchIcon } from 'lucide-react';
+import { Check, ChevronDown, Link as LinkIcon, ListMusic, LogOut, Search as SearchIcon } from 'lucide-react';
 import { httpBase } from '../config';
+import type { PlaylistInfo } from '../api/types';
 import {
   api,
   getPersistedRoomId,
@@ -30,6 +31,7 @@ import { renderer } from '../app/player';
 import { syncMediaSession } from '../app/mediasession';
 import { YuzuError } from '../protocol/types';
 import { useConnStatus, useIdentity, useRoomState } from './hooks';
+import { coverSrc } from './cover';
 import ExternalBindingDialog from './ExternalBindingDialog';
 import ThemeControls from './ThemeControls';
 import { useToast } from './toast';
@@ -325,7 +327,7 @@ function TopBar() {
           value={keyword}
           onChange={(event) => setKeyword(event.target.value)}
           placeholder={t('search.placeholder')}
-          className="w-full min-w-0 bg-transparent py-1.5 pr-3 pl-2 text-[13px] placeholder:text-faint focus:outline-none"
+          className="search-input w-full min-w-0 bg-transparent py-1.5 pr-3 pl-2 text-[13px] placeholder:text-faint focus:outline-none"
         />
       </form>
 
@@ -388,34 +390,80 @@ function AccountMenu() {
   );
 }
 
-/** 左侧导航：品牌与页面导航；搜索已由顶栏搜索框取代，账户/主题/管理在顶栏。 */
+/** 左侧 Library：品牌（点击回首页）+ 歌单列表（封面占位，等后端歌单封面规范）。 */
 function Sidebar() {
   const { t } = useTranslation();
+  const location = useLocation();
+  const [playlists, setPlaylists] = useState<PlaylistInfo[] | null>(null);
+
+  // 挂载 + 路由变化时刷新：在管理页导入/删除歌单后回来即最新
+  useEffect(() => {
+    let dead = false;
+    api
+      .listPlaylists()
+      .then((list) => {
+        if (!dead) setPlaylists(list);
+      })
+      .catch(() => {});
+    return () => {
+      dead = true;
+    };
+  }, [location.pathname]);
+
   return (
-    <aside className="flex w-52 flex-none flex-col border-r border-hairline max-md:hidden">
-      <div className="px-5 py-5 font-display text-xl font-semibold">
+    <aside className="flex w-60 flex-none flex-col border-r border-hairline max-md:hidden">
+      <NavLink to="/" className="px-5 py-5 font-display text-xl font-semibold">
         Yuzu <em className="font-normal italic text-accent">Jukebox</em>
+      </NavLink>
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-4">
+        <div className="px-2 pb-2 font-mono text-[11px] tracking-[0.14em] text-faint">
+          {t('shell.library')}
+        </div>
+        {playlists === null ? (
+          <div className="px-2 py-1 text-[12.5px] text-faint">{t('shell.libraryLoading')}</div>
+        ) : playlists.length === 0 ? (
+          <div className="px-2 py-1 text-[12.5px] text-muted">{t('shell.libraryEmpty')}</div>
+        ) : (
+          <nav className="flex flex-col gap-0.5">
+            {playlists.map((playlist) => (
+              <NavLink
+                key={playlist.id}
+                to={`/playlist/${playlist.id}`}
+                className={({ isActive }) =>
+                  `flex items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors ${
+                    isActive ? 'bg-panel-2' : 'hover:bg-panel'
+                  }`
+                }
+              >
+                <PlaylistCover playlist={playlist} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] text-paper">{playlist.name}</span>
+                  <span className="block truncate text-[11px] text-faint">
+                    {playlist.bound_provider
+                      ? t('shell.libraryBound', { provider: playlist.bound_provider })
+                      : t('shell.libraryTracks', { count: playlist.track_count })}
+                  </span>
+                </span>
+              </NavLink>
+            ))}
+          </nav>
+        )}
       </div>
-      <nav className="flex flex-col gap-1 px-3">
-        <NavItem to="/" end label={t('shell.navHome')} />
-      </nav>
     </aside>
   );
 }
 
-function NavItem({ to, end, label }: { to: string; end?: boolean; label: string }) {
+/** 歌单封面：后端规范已落地（cover_url 恒为代理路径），缺失时图标占位。 */
+function PlaylistCover({ playlist }: { playlist: PlaylistInfo }) {
+  if (playlist.cover_url) {
+    return (
+      <img src={coverSrc(playlist.cover_url)} alt="" className="h-10 w-10 flex-none rounded object-cover" />
+    );
+  }
   return (
-    <NavLink
-      to={to}
-      end={end}
-      className={({ isActive }) =>
-        `rounded-md px-3 py-2 text-[13.5px] transition-colors ${
-          isActive ? 'bg-panel-2 text-paper' : 'text-muted hover:bg-panel hover:text-paper'
-        }`
-      }
-    >
-      {label}
-    </NavLink>
+    <span className="grid h-10 w-10 flex-none place-items-center rounded bg-panel-2 text-faint">
+      <ListMusic className="h-4 w-4" />
+    </span>
   );
 }
 
