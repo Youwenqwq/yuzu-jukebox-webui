@@ -9,8 +9,8 @@ import { ListMusic } from 'lucide-react';
 import type { PlaylistDetail } from '../api/types';
 import { api, roomStore } from '../app/session';
 import { coverSrc } from './cover';
+import { TrackList } from './TrackList';
 import { useRoomState } from './hooks';
-import { formatMs } from './format';
 import { useToast } from './toast';
 import { useShell } from './AppShell';
 
@@ -70,14 +70,6 @@ export default function PlaylistDetailView(): JSX.Element {
     show(t('home.needRoom'));
     setRoomsOpen(true);
     return false;
-  };
-
-  const addOne = (trackRef: string, title: string) => {
-    if (!requireRoom()) return;
-    void roomStore
-      .addQueue([trackRef])
-      .then(() => show(t('room.addedToast', { title })))
-      .catch(showError);
   };
 
   const addAll = () => {
@@ -156,43 +148,16 @@ export default function PlaylistDetailView(): JSX.Element {
       {detail.items.length === 0 ? (
         <p className="py-10 text-center text-sm text-muted">{t('batch.playlistEmpty')}</p>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-hairline bg-panel">
-          {detail.items.map((item) => (
-            <div
-              key={item.ord}
-              className="group flex items-center gap-3 border-b border-hairline px-4 py-2.5 last:border-b-0 hover:bg-panel-2"
-            >
-              <span className="w-7 flex-none text-right font-mono text-xs text-faint tabular-nums">
-                {item.ord}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[13.5px]">{item.title}</div>
-                <div className="mt-0.5 truncate text-[11.5px] text-muted">{item.artist}</div>
-              </div>
-              <span className="flex-none font-mono text-[11.5px] text-muted tabular-nums">
-                {formatMs(item.duration_ms)}
-              </span>
-              <button
-                type="button"
-                title={t('search.add')}
-                onClick={() => addOne(item.track_ref, item.title)}
-                className="grid h-7 w-7 flex-none place-items-center rounded-full border border-hairline text-muted opacity-0 transition-opacity hover:border-accent hover:text-accent focus:opacity-100 group-hover:opacity-100"
-              >
-                +
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-      {detail.items.length < detail.playlist.track_count && (
-        <button
-          type="button"
-          onClick={loadMore}
-          disabled={loadingMore}
-          className="mt-3 w-full rounded-md border border-hairline py-2.5 text-[12.5px] text-accent hover:bg-panel disabled:opacity-40"
-        >
-          {loadingMore ? t('common.loading') : t('playlistDetail.loadMore')}
-        </button>
+        <TrackList
+          tracks={detail.items.map((item) => ({
+            track_ref: item.track_ref,
+            title: item.title,
+            artist: item.artist,
+            duration_ms: item.duration_ms,
+          }))}
+          onLoadMore={detail.items.length < detail.playlist.track_count ? loadMore : undefined}
+          loadingMore={loadingMore}
+        />
       )}
     </div>
   );
