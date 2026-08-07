@@ -7,6 +7,12 @@ export const zhCN = {
   app: {
     title: 'Yuzu Jukebox',
   },
+  native: {
+    batteryTitle: '保持后台播放',
+    batteryBody: '把 Yuzu 加入电池优化白名单，锁屏后音乐不中断',
+    batteryAction: '去设置',
+    batteryDismiss: '知道了',
+  },
   common: {
     loading: '加载中…',
     retry: '重试',
@@ -581,6 +587,16 @@ export const zhCN = {
       muteUnsupported: '此播放端不支持远程静音',
     },
   },
+  serverPicker: {
+    label: '服务器',
+    unset: '未配置',
+    change: '更改',
+    dialogTitle: '服务端地址',
+    placeholder: 'https://jukebox.example.com',
+    save: '保存并重连',
+    cancel: '取消',
+    invalid: '地址无效：需要 http(s) 完整地址',
+  },
   login: {
     title: '进入大厅',
     namePlaceholder: '你的名字',
@@ -632,6 +648,8 @@ export const zhCN = {
     presetFmDesc: '不知道听什么的时候',
     presetHeartDesc: '从喜欢的歌出发',
     presetSimiDesc: '跟着当前这首走下去',
+    presetTopDesc: '跟着排行榜一路听',
+    presetNewsongDesc: '每天都有新歌听',
     seedNeed: '房里正在放对应来源的歌时可用',
     playlistSource: '歌单作台',
     playlistPick: '选一个歌单作电台…',
@@ -826,6 +844,7 @@ export const zhCN = {
     expand: '全屏播放',
     closePlayer: '关闭全屏',
     showLyrics: '查看歌词',
+    showCover: '查看封面',
     addedToast: '已加入队列 · {{title}}',
     addedBatchToast: '已加入队列 · {{count}} 首',
   },

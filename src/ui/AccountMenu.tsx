@@ -1,13 +1,16 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DropdownMenu } from 'radix-ui';
-import { ChevronDown, History, Link as LinkIcon, LogOut, MonitorSpeaker } from 'lucide-react';
+import { ChevronDown, History, Link as LinkIcon, LogOut, MonitorSpeaker, Server } from 'lucide-react';
+import { httpBase } from '../config';
+import { isNativeApp } from '../app/nativemedia';
 import { session } from '../app/session';
 import { useIdentity } from './hooks';
 import { AccountAvatar } from './AccountAvatar';
 import { ThemeContent } from './ThemeControls';
 import ExternalBindingDialog from './ExternalBindingDialog';
 import { MyHistoryDialog } from './MyHistoryDialog';
+import { ServerAddressDialog } from './ServerSettings';
 
 /** 账户菜单（桌面/移动共用）。
  * compact（移动端）：触发钮只展示头像，昵称收进菜单顶部；
@@ -26,6 +29,8 @@ export function AccountMenu({
   const identity = useIdentity();
   const [bindingOpen, setBindingOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [serverOpen, setServerOpen] = useState(false);
+  const serverHost = formatServerHost(httpBase) ?? t('serverPicker.unset');
   if (!identity) return null;
 
   const itemClass =
@@ -81,6 +86,12 @@ export function AccountMenu({
               <History className="h-3.5 w-3.5" />
               {t('lobby.myHistory')}
             </DropdownMenu.Item>
+            {isNativeApp && (
+              <DropdownMenu.Item className={itemClass} onSelect={() => setServerOpen(true)}>
+                <Server className="h-3.5 w-3.5" />
+                {t('serverPicker.label')}：{serverHost}
+              </DropdownMenu.Item>
+            )}
             {themeInMenu && (
               <div className="border-t border-hairline pt-1">
                 <ThemeContent />
@@ -100,6 +111,18 @@ export function AccountMenu({
         <ExternalBindingDialog open={bindingOpen} onOpenChange={setBindingOpen} />
       )}
       <MyHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} />
+      {isNativeApp && (
+        <ServerAddressDialog open={serverOpen} onOpenChange={setServerOpen} />
+      )}
     </>
   );
+}
+
+function formatServerHost(address: string): string | null {
+  if (!address) return null;
+  try {
+    return new URL(address).host || null;
+  } catch {
+    return null;
+  }
 }

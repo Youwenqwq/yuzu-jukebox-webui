@@ -9,6 +9,7 @@
  */
 import { App } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
+import { useEffect, useId } from 'react';
 
 interface OverlayCloser {
   id: string;
@@ -45,4 +46,14 @@ export function initBackButton(): void {
     }
     void App.minimizeApp();
   });
+}
+
+/** Radix Dialog 系通用接线：open 期间把关闭压入返回键栈，关闭/卸载即出栈。 */
+export function useBackButtonClose(open: boolean, onOpenChange: (open: boolean) => void): void {
+  const id = useId();
+  useEffect(() => {
+    if (!open) return;
+    pushOverlayCloser(id, () => onOpenChange(false));
+    return () => removeOverlayCloser(id);
+  }, [id, open, onOpenChange]);
 }

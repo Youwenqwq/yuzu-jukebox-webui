@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { OidcConfig } from '../api/types';
-import { adminPasswordEnabled, oidcClientId } from '../config';
+import { adminPasswordEnabled, httpBase, oidcClientId } from '../config';
 import { YuzuError } from '../protocol/types';
 import { api, oidcFlow, session } from '../app/session';
+import { isNativeApp } from '../app/nativemedia';
 import { errorKey } from './errors';
+import { ServerAddressEditor } from './ServerSettings';
 
 /** Zitadel roles scope：让 roles 随 token 下发，不依赖 console 应用级设置 */
 const OIDC_SCOPES = ['urn:zitadel:iam:org:projects:roles'];
@@ -16,6 +18,7 @@ export default function LoginView({ oidcError, onDone }: { oidcError: YuzuError 
   const [error, setError] = useState<YuzuError | null>(oidcError);
   const [busy, setBusy] = useState(false);
   const [oidc, setOidc] = useState<OidcConfig | null>(null);
+  const [serverEditorOpen, setServerEditorOpen] = useState(false);
 
   useEffect(() => {
     api.oidcConfig().then(setOidc).catch(() => setOidc(null));
@@ -109,6 +112,27 @@ export default function LoginView({ oidcError, onDone }: { oidcError: YuzuError 
               {t('login.oidcButton')}
             </button>
           </>
+        )}
+
+        {isNativeApp && (
+          <div className="mt-8 border-t border-hairline pt-4 font-mono text-[11px] text-faint">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="shrink-0">{t('serverPicker.label')}</span>
+              <span className="min-w-0 flex-1 truncate">{httpBase || t('serverPicker.unset')}</span>
+              <button
+                type="button"
+                onClick={() => setServerEditorOpen(true)}
+                className="shrink-0 text-muted hover:text-paper"
+              >
+                {t('serverPicker.change')}
+              </button>
+            </div>
+            {serverEditorOpen && (
+              <div className="mt-3">
+                <ServerAddressEditor onCancel={() => setServerEditorOpen(false)} />
+              </div>
+            )}
+          </div>
         )}
       </form>
     </div>

@@ -4,6 +4,7 @@
  */
 import { Dialog as DialogPrimitive, Select as SelectPrimitive, Tabs as TabsPrimitive } from 'radix-ui';
 import type { ReactNode } from 'react';
+import { useBackButtonClose } from './backbutton';
 
 // ---------- Dialog ----------
 
@@ -17,6 +18,7 @@ export function ConfirmDialog(props: {
   danger?: boolean;
   onConfirm: () => void;
 }) {
+  useBackButtonClose(props.open, props.onOpenChange);
   return (
     <DialogPrimitive.Root open={props.open} onOpenChange={props.onOpenChange}>
       <DialogPrimitive.Portal>
@@ -64,6 +66,7 @@ export function Dialog(props: {
   size?: 'default' | 'wide';
   children: ReactNode;
 }) {
+  useBackButtonClose(props.open, props.onOpenChange);
   const width = props.size === 'wide' ? 'w-[min(94vw,720px)]' : 'w-[min(92vw,440px)]';
   return (
     <DialogPrimitive.Root open={props.open} onOpenChange={props.onOpenChange}>
