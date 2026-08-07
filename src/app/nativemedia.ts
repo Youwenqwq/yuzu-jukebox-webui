@@ -14,12 +14,12 @@
 import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core';
 import type { Playback } from '../protocol/types';
 
-/** 与 syncMediaSession 相同的注入约定。onSeek 仅 controller 注入（房间级 seek）。 */
+/** 与 syncMediaSession 相同的注入约定。系统媒体控件的 seek 已禁用（共享房间
+ *  治理，原生 onSeekTo 忽略、Web 不注册 seekto），无 onSeek 回调。 */
 export interface NativeMediaHandlers {
   onPlay?: () => void;
   onPause?: () => void;
   onNextTrack?: () => void;
-  onSeek?: (positionMs: number) => void;
 }
 
 /** 原生 YuzuMedia 插件的 JS 侧形态（与 @CapacitorPlugin 方法一一对应）。 */
@@ -70,9 +70,6 @@ export function createNativeMediaSync(
           if (event.action === 'play') current.onPlay?.();
           else if (event.action === 'pause') current.onPause?.();
           else if (event.action === 'next') current.onNextTrack?.();
-          else if (event.action === 'seek' && typeof event.positionMs === 'number') {
-            current.onSeek?.(event.positionMs);
-          }
         })
         .catch(() => {
           listenerReady = null;

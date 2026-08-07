@@ -1,6 +1,8 @@
 import type { Playback } from '../protocol/types';
 
-/** 同步系统媒体会话：元数据、播放态、进度、动作处理。动作回调由调用方注入（便于测试与权限控制）。 */
+/** 同步系统媒体会话：元数据、播放态、进度、动作处理。动作回调由调用方注入（便于测试与权限控制）。
+ *  系统媒体控件的 seek 一律禁用（共享房间治理）：不注册 seekto handler，
+ *  进度条仍由 setPositionState 提供但不可拖；房间级 seek 只从 App 内 UI 发起。 */
 export function syncMediaSession(
   playback: Playback,
   artworkBase: string,
@@ -8,7 +10,6 @@ export function syncMediaSession(
     onPlay?: () => void;
     onPause?: () => void;
     onNextTrack?: () => void;
-    onSeek?: (positionMs: number) => void;
   },
 ): void {
   if (!('mediaSession' in navigator) || !navigator.mediaSession) {
@@ -60,18 +61,6 @@ export function syncMediaSession(
     }
     try {
       mediaSession.setActionHandler('nexttrack', handlers.onNextTrack ?? null);
-    } catch {
-      // Some browsers expose Media Session but not every action.
-    }
-    try {
-      mediaSession.setActionHandler(
-        'seekto',
-        handlers.onSeek
-          ? (details) => {
-              if (details.seekTime !== undefined) handlers.onSeek!(details.seekTime * 1_000);
-            }
-          : null,
-      );
     } catch {
       // Some browsers expose Media Session but not every action.
     }

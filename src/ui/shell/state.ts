@@ -86,9 +86,8 @@ function usePlaybackWiring(canControl: boolean): void {
       },
       ...(canControl
         ? {
+            // 切歌是 controller 的房间级动作；seek 不再从系统控件注入（已禁用）
             onNextTrack: () => void roomStore.skip().catch(() => {}),
-            // 锁屏进度条拖拽 = 房间级 seek（controller 专属，与切歌同门槛）
-            onSeek: (positionMs: number) => void roomStore.seek(positionMs).catch(() => {}),
           }
         : {}),
     };
