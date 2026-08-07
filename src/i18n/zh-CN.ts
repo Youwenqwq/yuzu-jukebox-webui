@@ -908,6 +908,7 @@ export const zhCN = {
     queue_full: '队列满了，等几首播完再点',
     quota_exceeded: '你点的歌已达上限，播完后再来',
     not_found: '目标不存在',
+    not_supported: '这个来源不支持该操作',
     provider_error: '曲目来源出了点问题：{{message}}',
     internal: '服务端内部错误',
     rate_limited: '操作太频繁了，稍等一下',

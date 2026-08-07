@@ -7,6 +7,7 @@ const KNOWN_CODES = new Set([
   'queue_full',
   'quota_exceeded',
   'not_found',
+  'not_supported',
   'provider_error',
   'internal',
   'rate_limited',
