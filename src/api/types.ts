@@ -132,6 +132,8 @@ export interface ProviderInfo {
   credential_status?: string;
   /** 按当前请求 Principal 计算（是否凭据 owner）——不得跨用户缓存。 */
   owned?: boolean;
+  /** 仅凭据 owner 可见的账号快照（昵称/头像），服务端按请求 Principal 计算，不得跨用户缓存。 */
+  account?: { name?: string; avatar?: string };
   capabilities?: ProviderCapabilities;
 }
 

@@ -12,6 +12,7 @@ import type { PlaylistInfo } from '../api/types';
 import { api } from '../app/session';
 import { useConnStatus, useIdentity } from './hooks';
 import { AccountMenu } from './AccountMenu';
+import { BatteryOptBanner } from './BatteryOptBanner';
 import { LibraryList } from './LibraryList';
 import ThemeControls from './ThemeControls';
 import { PlayerBar } from './shell/PlayerBar';
@@ -50,6 +51,7 @@ export default function AppShell() {
         <PlayerBar />
         <QueueDrawer />
       </div>
+      <BatteryOptBanner />
     </ShellContext.Provider>
   );
 }
@@ -96,16 +98,6 @@ function TopBar() {
 
   return (
     <header className="flex flex-none items-center gap-3 border-b border-hairline px-5 py-2.5">
-      {/* 窄屏：品牌 + 导航（侧栏隐藏时的替代形态） */}
-      <span className="flex-none font-display text-base font-semibold md:hidden">
-        Yuzu <em className="font-normal italic text-accent">Jukebox</em>
-      </span>
-      <nav className="flex flex-none gap-3 text-[13px] md:hidden">
-        <NavLink to="/" end className={({ isActive }) => (isActive ? 'text-accent' : 'text-muted')}>
-          {t('shell.navHome')}
-        </NavLink>
-      </nav>
-
       <form
         className="flex w-full max-w-md items-center rounded-full border border-hairline bg-panel focus-within:border-accent"
         onSubmit={(event) => {

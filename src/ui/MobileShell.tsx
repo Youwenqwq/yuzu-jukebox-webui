@@ -11,6 +11,7 @@ import { useConnStatus } from './hooks';
 import { ShellContext } from './shellContext';
 import { useShellState } from './shell/state';
 import { AccountMenu } from './AccountMenu';
+import { BatteryOptBanner } from './BatteryOptBanner';
 import { MobilePlayerBar } from './MobilePlayerBar';
 import { MobileRoomDialog } from './MobileRoomDialog';
 import { QueueDrawer } from './shell/QueueDrawer';
@@ -30,7 +31,7 @@ export default function MobileShell() {
         )}
 
         {/* 移动顶栏：品牌 + 账户（搜索在底部 TabBar，主题收进账户菜单，管理不带入移动端） */}
-        <header className="flex flex-none items-center gap-2 border-b border-hairline px-3 py-2">
+        <header className="flex flex-none items-center gap-2 border-b border-hairline px-3 pb-2 pt-[calc(env(safe-area-inset-top)+0.5rem)]">
           <span className="flex-none font-display text-[15px] font-semibold">
             Yuzu <em className="font-normal italic text-accent">Jukebox</em>
           </span>
@@ -47,6 +48,7 @@ export default function MobileShell() {
         <MobileTabBar />
         <MobileRoomDialog open={value.roomsOpen} onOpenChange={value.setRoomsOpen} />
       </div>
+      <BatteryOptBanner />
     </ShellContext.Provider>
   );
 }
@@ -60,7 +62,7 @@ function MobileTabBar() {
     }`;
 
   return (
-    <nav className="flex flex-none border-t border-hairline bg-panel md:hidden">
+    <nav className="flex flex-none border-t border-hairline bg-panel pb-[env(safe-area-inset-bottom)] md:hidden">
       <NavLink to="/" end className={tabClass}>
         <Home className="h-5 w-5" />
         {t('shell.navHome')}

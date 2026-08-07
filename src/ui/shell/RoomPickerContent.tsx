@@ -163,7 +163,7 @@ export function RoomPickerContent({ onClose }: { onClose: () => void }): JSX.Ele
               {formatMs(pos)}
             </span>
             <div
-              className="h-[3px] flex-1 cursor-pointer overflow-hidden rounded bg-[var(--rail)]"
+              className="flex-1 cursor-pointer [@media(hover:none)]:-my-3 [@media(hover:none)]:py-3"
               onClick={(e) => {
                 if (current.duration_ms <= 0) return;
                 const rect = e.currentTarget.getBoundingClientRect();
@@ -171,7 +171,10 @@ export function RoomPickerContent({ onClose }: { onClose: () => void }): JSX.Ele
                 void roomStore.seek(Math.round(ratio * current.duration_ms)).catch(() => {});
               }}
             >
-              <div className="progress-glide h-full rounded bg-accent" style={{ width: `${pct}%` }} />
+              {/* 触摸端热区由外层 padding 扩到 27px，视觉轨道仍是 3px */}
+              <div className="h-[3px] overflow-hidden rounded bg-[var(--rail)]">
+                <div className="progress-glide h-full rounded bg-accent" style={{ width: `${pct}%` }} />
+              </div>
             </div>
             <span className="flex-none font-mono text-[10.5px] text-muted tabular-nums">
               {formatMs(current.duration_ms)}

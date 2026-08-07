@@ -10,6 +10,8 @@ export const SOURCE_DESC_KEYS: Record<string, string> = {
   fm: 'radio.presetFmDesc',
   heart: 'radio.presetHeartDesc',
   simi: 'radio.presetSimiDesc',
+  top: 'radio.presetTopDesc',
+  newsong: 'radio.presetNewsongDesc',
 };
 
 /**

@@ -72,8 +72,9 @@ export function MobilePlayerBar(): JSX.Element {
         <span className="truncate text-[12.5px] text-faint">{t('shell.idleHint')}</span>
         <button
           type="button"
+          data-queue-toggle
           onClick={() => setQueueOpen(true)}
-          className="grid h-8 w-8 flex-none place-items-center rounded-full text-muted hover:bg-[var(--hover)]"
+          className="relative grid h-8 w-8 flex-none place-items-center rounded-full text-muted after:absolute after:-inset-1 after:content-[''] hover:bg-[var(--hover)]"
         >
           <ListMusic className="h-4 w-4" />
         </button>
@@ -118,7 +119,7 @@ export function MobilePlayerBar(): JSX.Element {
           else renderer.pausePersonal();
           setPersonalPaused(renderer.isPersonalPaused);
         }}
-        className={`grid h-9 w-9 flex-none place-items-center rounded-full bg-accent text-on-accent ${
+        className={`relative grid h-9 w-9 flex-none place-items-center rounded-full bg-accent text-on-accent after:absolute after:-inset-1 after:content-[''] ${
           personalPaused ? 'opacity-70' : 'hover:brightness-105'
         }`}
       >
@@ -131,8 +132,9 @@ export function MobilePlayerBar(): JSX.Element {
       <button
         type="button"
         title={t('shell.queue')}
+        data-queue-toggle
         onClick={() => setQueueOpen(!queueOpen)}
-        className="grid h-8 w-8 flex-none place-items-center rounded-full text-muted hover:bg-[var(--hover)]"
+        className="relative grid h-8 w-8 flex-none place-items-center rounded-full text-muted after:absolute after:-inset-1 after:content-[''] hover:bg-[var(--hover)]"
       >
         <ListMusic className="h-4 w-4" />
       </button>

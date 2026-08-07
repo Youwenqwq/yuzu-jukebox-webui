@@ -21,6 +21,20 @@
 
   --radius: 6px;
   --speed: 240ms;
+
+  /* 壳高变量：QueueDrawer / BatteryOptBanner 均 portal 到 body，
+     无法继承壳容器上的变量，故在 :root 定义（移动端值见下方媒体查询）。
+     --header-h = 顶栏总高（含 border 与安全区）；--chrome-b = 视口底到
+     底部 chrome 顶部的距离（播放条 + TabBar，含 border 与安全区）。 */
+  --header-h: 3.6875rem; /* 桌面顶栏 59px（账户触发钮 38 + py-2.5 20 + border 1） */
+  --chrome-b: 4.5rem; /* 桌面播放栏 72px（h-18 含 border，实测） */
+}
+
+@media (width < 48rem) {
+  :root {
+    --header-h: calc(3.3125rem + env(safe-area-inset-top)); /* 移动顶栏 53px 实测 + 刘海 */
+    --chrome-b: calc(6.9875rem + env(safe-area-inset-bottom)); /* 播放条 56 + TabBar 55.8 实测 */
+  }
 }
 
 :root[data-scheme="dark"] {
@@ -87,6 +101,8 @@ body {
   font-size: 15px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  /* 触摸端去掉点击闪灰：组件自身已有 hover/active 反馈 */
+  -webkit-tap-highlight-color: transparent;
 }
 
 ::selection {

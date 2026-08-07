@@ -387,7 +387,23 @@ export default function MediaAdmin() {
                 >
                   <div className="min-w-0 flex-1">
                     <div className="font-mono text-sm font-medium">{provider.id}</div>
-                    <div className="mt-0.5 text-xs text-muted">{t(statusKey)}</div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted">
+                      <span>{t(statusKey)}</span>
+                      {provider.owned && provider.account && (
+                        <>
+                          {provider.account.avatar && (
+                            <img
+                              src={provider.account.avatar}
+                              alt=""
+                              className="h-6 w-6 flex-none rounded object-cover"
+                            />
+                          )}
+                          {provider.account.name && (
+                            <span className="min-w-0 truncate text-sm text-muted">{provider.account.name}</span>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </div>
                   {provider.credential_status !== undefined && (
                     <>

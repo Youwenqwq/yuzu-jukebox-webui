@@ -39,7 +39,7 @@ export function LyricsPanel(props: {
 
   return (
     <ol
-      className="no-scrollbar h-full overflow-y-auto text-center [mask-image:linear-gradient(to_bottom,transparent,black_18%,black_82%,transparent)]"
+      className="no-scrollbar h-full overflow-y-auto overscroll-contain text-center [mask-image:linear-gradient(to_bottom,transparent,black_18%,black_82%,transparent)]"
     >
       {/* 顶部留白，让首行能滚到视口中部 */}
       <li aria-hidden className="h-[38%]" />
