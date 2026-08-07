@@ -13,6 +13,7 @@ import { audio, renderer } from '../../app/player';
 import type { AccountPlaylist } from '../../api/types';
 import type { Playback } from '../../protocol/types';
 import { useLyrics } from '../useLyrics';
+import { coverSrc } from '../cover';
 import { useProviders, useRoomState } from '../hooks';
 import { formatMs } from '../format';
 import { FullscreenPlayer } from '../FullscreenPlayer';
@@ -214,7 +215,7 @@ export function PlayerBar(): JSX.Element {
             className="flex min-w-0 items-center gap-3 text-left"
           >
             {current.cover_url ? (
-              <img src={current.cover_url} alt="" className="h-11 w-11 flex-none rounded object-cover" />
+              <img src={coverSrc(current.cover_url)} alt="" className="h-11 w-11 flex-none rounded object-cover" />
             ) : (
               <div className="h-11 w-11 flex-none rounded bg-panel-2" />
             )}

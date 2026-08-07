@@ -56,27 +56,39 @@ function useCapabilities(): { canControl: boolean; canRadio: boolean } {
 /** 播放接线：渲染、Media Session、1s tick、自动播放解锁（常驻壳层，页面切换不影响出声）。 */
 function usePlaybackWiring(canControl: boolean): void {
   const state = useRoomState();
+  const [personalPaused, setPersonalPaused] = useState(renderer.isPersonalPaused);
 
   useEffect(() => {
     renderer.render(state.playback);
   }, [state.playback]);
 
+  // 媒体会话（锁屏/通知/蓝牙按键）= 本地收听控制：play/pause 是个人暂停/
+  // 恢复跟随（渲染层静默，房间照走），不是房间级暂停——个人控制面不产生
+  // 房间级副作用，听众也不再拿到死按钮。切歌无个人语义，保留房间级、仅
+  // controller。播放态按本地可闻性上报（playing && !personalPaused）。
+  // Web 版写 navigator.mediaSession；原生版推给前台服务，同一契约双写。
   useEffect(() => {
-    const handlers = canControl
-      ? {
-          onPlay: () => void roomStore.resume().catch(() => {}),
-          onPause: () => void roomStore.pause().catch(() => {}),
-          onNextTrack: () => void roomStore.skip().catch(() => {}),
-        }
-      : {};
-    // Web 版写 navigator.mediaSession；原生版（Capacitor）推给前台服务，
-    // 同一契约双写，各自在自己的平台上为空转。
-    syncMediaSession(state.playback, httpBase, handlers);
-    syncNativeMedia(state.playback, httpBase, handlers);
-  }, [canControl, state.playback]);
+    const handlers = {
+      onPlay: () => {
+        if (renderer.isPersonalPaused) renderer.resumePersonal();
+        setPersonalPaused(renderer.isPersonalPaused);
+      },
+      onPause: () => {
+        if (!renderer.isPersonalPaused) renderer.pausePersonal();
+        setPersonalPaused(renderer.isPersonalPaused);
+      },
+      ...(canControl ? { onNextTrack: () => void roomStore.skip().catch(() => {}) } : {}),
+    };
+    const audible = { ...state.playback, playing: state.playback.playing && !personalPaused };
+    syncMediaSession(audible, httpBase, handlers);
+    syncNativeMedia(audible, httpBase, handlers);
+  }, [canControl, state.playback, personalPaused]);
 
   useEffect(() => {
-    const id = setInterval(() => renderer.tick(), 1000);
+    const id = setInterval(() => {
+      renderer.tick();
+      setPersonalPaused(renderer.isPersonalPaused);
+    }, 1000);
     return () => clearInterval(id);
   }, []);
 

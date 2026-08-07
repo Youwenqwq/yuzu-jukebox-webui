@@ -236,6 +236,16 @@ input[type="number"] {
   background: var(--faint);
 }
 
+/* 触摸端不呈现滚动条：占位滚动条挤压内容宽度，导致主体右侧间距视觉大于左侧 */
+@media (hover: none) {
+  * {
+    scrollbar-width: none;
+  }
+  *::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* ---------- range（音量条）风格化 ---------- */
 input[type="range"] {
   -webkit-appearance: none;

@@ -9,6 +9,7 @@ import { ListMusic, Pause, Play } from 'lucide-react';
 import { client } from '../app/session';
 import { audio, renderer } from '../app/player';
 import { useRoomState } from './hooks';
+import { coverSrc } from './cover';
 import { useLyrics } from './useLyrics';
 import { FullscreenPlayer } from './FullscreenPlayer';
 import { useShell } from './shellContext';
@@ -98,7 +99,7 @@ export function MobilePlayerBar(): JSX.Element {
         className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
       >
         {current.cover_url ? (
-          <img src={current.cover_url} alt="" className="h-10 w-10 flex-none rounded object-cover" />
+          <img src={coverSrc(current.cover_url)} alt="" className="h-10 w-10 flex-none rounded object-cover" />
         ) : (
           <div className="h-10 w-10 flex-none rounded bg-panel-2" />
         )}

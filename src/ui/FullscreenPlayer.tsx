@@ -8,6 +8,7 @@ import type { Playback } from '../protocol/types';
 import type { LyricLine } from '../player/lyrics';
 import { activeLineIndex } from '../player/lyrics';
 import { extractGlowColors } from './glow';
+import { coverSrc } from './cover';
 import { pushOverlayCloser, removeOverlayCloser } from './backbutton';
 import { LyricsPanel } from './LyricsPanel';
 import { formatClock, formatMs } from './format';
@@ -140,7 +141,8 @@ export function FullscreenPlayer(props: {
           <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
             {current.cover_url ? (
               <img
-                src={current.cover_url}
+                src={coverSrc(current.cover_url)}
+                crossOrigin="anonymous"
                 alt=""
                 onLoad={grabGlow}
                 className="w-56 aspect-square rounded-xl object-cover landscape:w-32 sm:w-64 sm:landscape:w-40"
@@ -208,7 +210,8 @@ export function FullscreenPlayer(props: {
         <div className="max-w-md w-full mx-auto">
           {current.cover_url ? (
             <img
-              src={current.cover_url}
+              src={coverSrc(current.cover_url)}
+              crossOrigin="anonymous"
               alt=""
               onLoad={grabGlow}
               className="w-full aspect-square rounded-xl object-cover"

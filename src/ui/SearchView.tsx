@@ -72,7 +72,7 @@ export default function SearchView(): JSX.Element {
     <div className="view-enter mx-auto max-w-5xl px-4 pt-4 pb-10 md:px-7 md:pt-7">
       {/* 移动端输入框：顶栏搜索 icon 跳转到这里，页面自带输入（桌面端用顶栏输入框） */}
       <form
-        className="mb-5 flex items-center gap-2 rounded-full border border-hairline bg-panel px-3.5 py-2 md:hidden"
+        className="mb-3 flex items-center gap-2 rounded-full border border-hairline bg-panel px-3.5 py-2 md:hidden"
         onSubmit={(event) => {
           event.preventDefault();
           const q = mobileKeyword.trim();
@@ -87,6 +87,33 @@ export default function SearchView(): JSX.Element {
           className="search-input w-full min-w-0 bg-transparent text-[13px] placeholder:text-faint focus:outline-none"
         />
       </form>
+
+      {/* 移动端来源切换（桌面端在顶栏下拉）：沿用 chips 视觉，选中即换源并记忆 */}
+      {providers && providers.length > 1 && (
+        <div className="mb-5 flex flex-wrap gap-2 md:hidden">
+          {providers.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => {
+                localStorage.setItem(SEARCH_PROVIDER_KEY, item.id);
+                navigate(
+                  query
+                    ? `/search?q=${encodeURIComponent(query)}&p=${encodeURIComponent(item.id)}`
+                    : `/search?p=${encodeURIComponent(item.id)}`,
+                );
+              }}
+              className={`rounded-full px-3.5 py-1.5 font-mono text-[12.5px] transition-colors ${
+                provider === item.id
+                  ? 'bg-accent text-on-accent'
+                  : 'border border-hairline text-muted hover:border-faint hover:text-paper'
+              }`}
+            >
+              {item.id}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="mb-6 flex flex-wrap gap-2">
         {chips.map((chip) => (
