@@ -50,7 +50,7 @@ public class YuzuMediaPlugin extends Plugin {
             nullToEmpty(call.getString("artist")),
             nullToEmpty(call.getString("album")),
             nullToEmpty(call.getString("artworkUrl")),
-            call.getLong("durationMs", 0L)
+            numberAsLong(call, "durationMs", 0L)
         );
         call.resolve();
     }
@@ -58,7 +58,7 @@ public class YuzuMediaPlugin extends Plugin {
     @PluginMethod
     public void setPlaybackState(PluginCall call) {
         boolean playing = Boolean.TRUE.equals(call.getBoolean("playing", false));
-        long positionMs = call.getLong("positionMs", 0L);
+        long positionMs = numberAsLong(call, "positionMs", 0L);
         float rate = call.getFloat("rate", 1f);
         manager.setPlaybackState(playing, positionMs, rate);
         call.resolve();
@@ -142,5 +142,18 @@ public class YuzuMediaPlugin extends Plugin {
 
     private static String nullToEmpty(String value) {
         return value == null ? "" : value;
+    }
+
+    /**
+     * PluginCall.getLong 只认 org.json 解析为 Long 的值；JS 侧 int 范围的数字
+     * 会被 JSONObject 存成 Integer，getLong 直接回退默认值（曾导致位置与时长
+     * 恒为 0、锁屏进度条缺失）。统一按 Number 提取，覆盖 Integer/Long/Double。
+     */
+    private static long numberAsLong(PluginCall call, String name, long fallback) {
+        Object value = call.getData().opt(name);
+        if (value instanceof Number) {
+            return ((Number) value).longValue();
+        }
+        return fallback;
     }
 }
