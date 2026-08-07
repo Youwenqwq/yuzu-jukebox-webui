@@ -120,6 +120,11 @@ Web 资源打包进 `android/`（`webDir: dist`），applicationId `dev.uwen.yuz
   （只钳上限 duration）：切歌瞬间 position 为负，系统歌词无当前行，到 0 才起播，
   与音频对齐；钳 0 会让歌词整首领先 start_lead。1s tick（`nativemedia.tick`）
   持续用 serverNow 刷新 PlaybackState 以抵消时钟漂移，暂停态不推。
+- **系统媒体控件 seek 已禁用**（共享房间治理）：PlaybackState 不设
+  `ACTION_SEEK_TO`（通知栏进度条仍显示但只读，真机实测），且 `onSeekTo` 忽略
+  （`TransportControls.seekTo` 不校验 actions，去 SEEK_TO 只挡通知栏 UI，锁屏
+  仍可拖拽触发 seek 命令，必须在回调层拦截），`dispatchSeek` 已删。房间级 seek
+  只能从 App 内 UI（`roomStore.seek`）发起，防低注意力场景误触改全房间进度。
   同步单例在 `app/session.ts` 组装（`nativeMediaSync`，注入
   `client.clock.serverNow`），浏览器为 null。
 - **锁屏歌词（ColorOS 16+ lyricInfo 协议）**：歌词以 JSON 字符串挂

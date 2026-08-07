@@ -80,9 +80,13 @@ public class MediaSessionManager {
                 dispatchAction("next");
             }
 
+            // 系统 seek 一律忽略：锁屏/通知栏/蓝牙的 seek 命令都经此回调（TransportControls
+            // 不校验 PlaybackState.actions，去 SEEK_TO 只挡了通知栏 UI，锁屏仍可拖拽触发）。
+            // 房间级 seek 是治理操作，只允许从 App 内 UI 发起（roomStore.seek），
+            // 系统控件不提供该入口——避免低注意力场景误触改全房间进度。
             @Override
             public void onSeekTo(final long pos) {
-                dispatchSeek(pos);
+                // 有意忽略
             }
         });
     }
@@ -120,15 +124,6 @@ public class MediaSessionManager {
         main.post(() -> {
             if (actionListener != null) {
                 actionListener.onMediaAction(action, -1);
-            }
-        });
-    }
-
-    /** 锁屏进度条拖拽：携带目标位置（ms），是否受理由 JS 侧按控制权限决定。 */
-    void dispatchSeek(final long positionMs) {
-        main.post(() -> {
-            if (actionListener != null) {
-                actionListener.onMediaAction("seek", positionMs);
             }
         });
     }
@@ -216,7 +211,9 @@ public class MediaSessionManager {
                         | PlaybackState.ACTION_PAUSE
                         | PlaybackState.ACTION_PLAY_PAUSE
                         | PlaybackState.ACTION_SKIP_TO_NEXT
-                        | PlaybackState.ACTION_SEEK_TO
+                        // 无 ACTION_SEEK_TO：锁屏/通知栏进度条仍显示但只读（真机
+                        // 实测 ColorOS），房间 seek 只留 App 内 UI，避免误触拖拽
+                        // 改全房间进度。蓝牙媒体键的 seek 命令仍经 onSeekTo 路由。
                 )
                 .setState(
                     playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED,
