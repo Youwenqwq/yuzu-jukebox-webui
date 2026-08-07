@@ -49,7 +49,9 @@ export const wsBase: string = configured
   ? configured.replace(/^http/, 'ws')
   : `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}`;
 
-/** WebUI 的 PKCE 应用 client_id；空串 = 回退服务端 oidcConfig 主 client_id。 */
+/** OIDC PKCE 应用 client_id（可选覆盖）：默认留空 = 跟随服务器——client_id
+ *  用当前服务器 oidcConfig 的主 id（App 手动切服务器后自动跟随新服务器配置）。
+ *  仅当需要覆盖服务器主 id（如单服务器多应用）时填写；Web 与原生平台共用。 */
 export const oidcClientId: string =
   runtime.oidc_client_id || (import.meta.env.VITE_YUZU_OIDC_CLIENT_ID as string | undefined) || '';
 

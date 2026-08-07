@@ -48,6 +48,9 @@ export default function LoginView({ oidcError, onDone }: { oidcError: YuzuError 
     setError(null);
     try {
       await oidcFlow.begin(oidc, {
+        // 默认跟随服务器：client_id 用当前服务器 oidcConfig 的主 id（App 手动
+        // 切服务器后自动带出新服务器配置）。config.js 的 oidc_client_id 仅在
+        // 单服务器多应用等特殊场景作覆盖，日常留空。
         clientId: oidcClientId || undefined,
         scopes: OIDC_SCOPES,
       });

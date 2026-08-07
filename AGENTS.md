@@ -204,3 +204,14 @@ onNewIntent → App 插件 `appUrlOpen` 事件 → App.tsx 处理；授权页经
 **IdP 应用白名单需同时登记两个 redirect_uri**。scheme 改动后 `cap sync`
 会重写 manifest 的 Capacitor 段，但 MainActivity 的 intent-filter 是手写的，
 不要被覆盖。
+
+**OIDC client_id 模型（跟随服务器，非静态配置）**：
+- client_id 是公开值且随服务器走：App/Web 的授权请求默认用**当前服务器
+  oidcConfig 的主 client_id**（App 手动切服务器后登录自动用新服务器配置），
+  config.js 的 `oidc_client_id` 只作单服务器多应用场景的可选覆盖。
+- 服务器主应用须**同时服务两端**：Zitadel 侧配 **Native 类型**应用（RFC 8252，
+  仅 Native 类型放行 custom scheme），redirect_uri 登记 `yuzu-jukebox://oauth`
+  与 Web 应用根 https 两个（oidc 库对 Native 应用放行非 loopback https，
+  Console 表单提示「自定义协议或 loopback」属规范引导，非运行时拒绝）。
+- 若某服务器另有 Web 专用 User-Agent 应用，其 id 加入服务端
+  `oidc.extra_client_ids`（aud 验签放行），WebUI 仍默认用主 id。
