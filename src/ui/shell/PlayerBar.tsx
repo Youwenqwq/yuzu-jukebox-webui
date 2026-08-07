@@ -123,7 +123,11 @@ export function PlayerBar(): JSX.Element {
   // 进度 1s 重算（校时时钟由 WS 连接在启动时建立）
   const [, forceTick] = useReducer((x: number) => x + 1, 0);
   useEffect(() => {
-    const id = setInterval(forceTick, 1000);
+    const id = setInterval(() => {
+      forceTick();
+      // 锁屏/媒体键可直接改 renderer 的个人暂停态（不经本组件按钮），tick 时回读对齐
+      setPersonalPaused(renderer.isPersonalPaused);
+    }, 1000);
     return () => clearInterval(id);
   }, []);
 
