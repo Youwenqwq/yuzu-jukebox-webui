@@ -139,6 +139,9 @@ public class YuzuPlaybackService extends Service implements MediaSessionManager.
         );
     }
 
+    // API 24-25 无通知渠道，只能走旧构造器（警告在此压注，不用 compat 是因为
+    // MediaStyle 需要 framework MediaSession.Token，与 compat Style 不互通）
+    @SuppressWarnings("deprecation")
     private Notification buildNotification() {
         Intent launch = new Intent(this, MainActivity.class);
         PendingIntent contentIntent = PendingIntent.getActivity(

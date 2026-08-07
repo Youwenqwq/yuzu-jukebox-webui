@@ -77,7 +77,13 @@ function usePlaybackWiring(canControl: boolean): void {
         if (!renderer.isPersonalPaused) renderer.pausePersonal();
         setPersonalPaused(renderer.isPersonalPaused);
       },
-      ...(canControl ? { onNextTrack: () => void roomStore.skip().catch(() => {}) } : {}),
+      ...(canControl
+        ? {
+            onNextTrack: () => void roomStore.skip().catch(() => {}),
+            // 锁屏进度条拖拽 = 房间级 seek（controller 专属，与切歌同门槛）
+            onSeek: (positionMs: number) => void roomStore.seek(positionMs).catch(() => {}),
+          }
+        : {}),
     };
     const audible = { ...state.playback, playing: state.playback.playing && !personalPaused };
     syncMediaSession(audible, httpBase, handlers);

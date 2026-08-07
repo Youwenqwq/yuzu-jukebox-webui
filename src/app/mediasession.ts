@@ -4,7 +4,12 @@ import type { Playback } from '../protocol/types';
 export function syncMediaSession(
   playback: Playback,
   artworkBase: string,
-  handlers: { onPlay?: () => void; onPause?: () => void; onNextTrack?: () => void },
+  handlers: {
+    onPlay?: () => void;
+    onPause?: () => void;
+    onNextTrack?: () => void;
+    onSeek?: (positionMs: number) => void;
+  },
 ): void {
   if (!('mediaSession' in navigator) || !navigator.mediaSession) {
     return;
@@ -55,6 +60,18 @@ export function syncMediaSession(
     }
     try {
       mediaSession.setActionHandler('nexttrack', handlers.onNextTrack ?? null);
+    } catch {
+      // Some browsers expose Media Session but not every action.
+    }
+    try {
+      mediaSession.setActionHandler(
+        'seekto',
+        handlers.onSeek
+          ? (details) => {
+              if (details.seekTime !== undefined) handlers.onSeek!(details.seekTime * 1_000);
+            }
+          : null,
+      );
     } catch {
       // Some browsers expose Media Session but not every action.
     }

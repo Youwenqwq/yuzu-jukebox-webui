@@ -33,9 +33,12 @@ public class YuzuMediaPlugin extends Plugin {
     @Override
     public void load() {
         manager = MediaSessionManager.getInstance(getContext());
-        manager.setActionListener(action -> {
+        manager.setActionListener((action, positionMs) -> {
             JSObject data = new JSObject();
             data.put("action", action);
+            if (positionMs >= 0) {
+                data.put("positionMs", positionMs);
+            }
             notifyListeners("action", data);
         });
     }

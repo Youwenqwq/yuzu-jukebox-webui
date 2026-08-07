@@ -56,6 +56,7 @@ describe('syncMediaSession', () => {
     const onPlay = vi.fn();
     const onPause = vi.fn();
     const onNextTrack = vi.fn();
+    const onSeek = vi.fn();
     vi.stubGlobal('MediaMetadata', FakeMediaMetadata);
     vi.stubGlobal('navigator', { mediaSession });
     vi.spyOn(Date, 'now').mockReturnValue(2_000);
@@ -64,6 +65,7 @@ describe('syncMediaSession', () => {
       onPlay,
       onPause,
       onNextTrack,
+      onSeek,
     });
 
     expect(mediaSession.metadata?.init).toEqual({
@@ -78,11 +80,19 @@ describe('syncMediaSession', () => {
       playbackRate: 1.5,
       position: 6.5,
     });
-    expect(setActionHandler.mock.calls).toEqual([
+    const calls = setActionHandler.mock.calls;
+    expect(calls.slice(0, 3)).toEqual([
       ['play', onPlay],
       ['pause', onPause],
       ['nexttrack', onNextTrack],
     ]);
+    // seekto 是包装回调：秒 → 毫秒换算后派发
+    expect(calls[3]?.[0]).toBe('seekto');
+    const seekto = calls[3]?.[1] as (details: { seekTime?: number }) => void;
+    seekto({ seekTime: 42 });
+    seekto({});
+    expect(onSeek).toHaveBeenCalledTimes(1);
+    expect(onSeek).toHaveBeenCalledWith(42_000);
   });
 
   it('clears track state and unused handlers when playback has no current track', () => {
@@ -106,6 +116,7 @@ describe('syncMediaSession', () => {
       ['play', null],
       ['pause', null],
       ['nexttrack', null],
+      ['seekto', null],
     ]);
   });
 

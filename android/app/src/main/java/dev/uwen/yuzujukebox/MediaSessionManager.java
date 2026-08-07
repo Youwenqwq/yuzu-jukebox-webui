@@ -23,9 +23,9 @@ import java.util.concurrent.Executors;
  */
 public class MediaSessionManager {
 
-    /** 媒体动作出口：由插件注入，转发为 JS 事件。 */
+    /** 媒体动作出口：由插件注入，转发为 JS 事件。seek 动作携带 positionMs，其余为 -1。 */
     public interface ActionListener {
-        void onMediaAction(String action);
+        void onMediaAction(String action, long positionMs);
     }
 
     /** 会话内容变更通知：由前台服务注入，用于刷新通知与唤醒锁。 */
@@ -77,6 +77,11 @@ public class MediaSessionManager {
             public void onSkipToNext() {
                 dispatchAction("next");
             }
+
+            @Override
+            public void onSeekTo(final long pos) {
+                dispatchSeek(pos);
+            }
         });
     }
 
@@ -112,7 +117,16 @@ public class MediaSessionManager {
     void dispatchAction(final String action) {
         main.post(() -> {
             if (actionListener != null) {
-                actionListener.onMediaAction(action);
+                actionListener.onMediaAction(action, -1);
+            }
+        });
+    }
+
+    /** 锁屏进度条拖拽：携带目标位置（ms），是否受理由 JS 侧按控制权限决定。 */
+    void dispatchSeek(final long positionMs) {
+        main.post(() -> {
+            if (actionListener != null) {
+                actionListener.onMediaAction("seek", positionMs);
             }
         });
     }
@@ -187,6 +201,7 @@ public class MediaSessionManager {
                         | PlaybackState.ACTION_PAUSE
                         | PlaybackState.ACTION_PLAY_PAUSE
                         | PlaybackState.ACTION_SKIP_TO_NEXT
+                        | PlaybackState.ACTION_SEEK_TO
                 )
                 .setState(
                     playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED,

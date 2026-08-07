@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Playback } from '../protocol/types';
 import { createNativeMediaSync, type YuzuMediaPluginHandle } from './nativemedia';
 
-type ActionListener = (event: { action: string }) => void;
+type ActionListener = (event: { action: string; positionMs?: number }) => void;
 
 function fakePlugin() {
   const listeners: ActionListener[] = [];
@@ -21,7 +21,8 @@ function fakePlugin() {
   };
   return {
     plugin,
-    emit: (action: string) => listeners.forEach((listener) => listener({ action })),
+    emit: (action: string, positionMs?: number) =>
+      listeners.forEach((listener) => listener({ action, positionMs })),
   };
 }
 
@@ -151,7 +152,7 @@ describe('createNativeMediaSync', () => {
     const { plugin, emit } = fakePlugin();
     const sync = createNativeMediaSync(plugin);
     const first = { onPlay: vi.fn(), onNextTrack: vi.fn() };
-    const second = { onPlay: vi.fn(), onPause: vi.fn() };
+    const second = { onPlay: vi.fn(), onPause: vi.fn(), onSeek: vi.fn() };
 
     sync.sync(makePlayback(), BASE, first);
     sync.sync(makePlayback({ positionMs: 11_000 }), BASE, second);
@@ -160,12 +161,16 @@ describe('createNativeMediaSync', () => {
     emit('play');
     emit('pause');
     emit('next');
+    emit('seek', 42_000);
+    emit('seek'); // 无 positionMs 的 seek 不派发
 
     expect(first.onPlay).not.toHaveBeenCalled();
     expect(second.onPlay).toHaveBeenCalledTimes(1);
     expect(second.onPause).toHaveBeenCalledTimes(1);
     expect(first.onNextTrack).not.toHaveBeenCalled();
     expect(second).not.toHaveProperty('onNextTrack');
+    expect(second.onSeek).toHaveBeenCalledWith(42_000);
+    expect(second.onSeek).toHaveBeenCalledTimes(1);
   });
 
   it('retries keep-alive on the next sync after a rejected start', async () => {
