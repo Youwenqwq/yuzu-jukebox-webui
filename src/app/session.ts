@@ -9,6 +9,8 @@ import { createRoomCredentialStore } from '../auth/roomCredentials';
 import { YuzuClient } from '../protocol/client';
 import { SessionStore } from '../protocol/store';
 import type { Identity } from '../protocol/types';
+import { createNativeMediaSync, yuzuMediaPlugin } from './nativemedia';
+import type { NativeMediaSync } from './nativemedia';
 
 export const tokenStore = createSessionTokenStore();
 export const roomCredentials = createRoomCredentialStore();
@@ -18,6 +20,12 @@ export const api = new ApiClient(() => tokenStore.get(), {
 export const client = new YuzuClient();
 export const roomStore = new SessionStore(client);
 export const oidcFlow = createOidcFlow();
+
+/** 原生媒体会话同步单例：serverNow 时钟基准（与 UI 同钟，避免设备/服务器
+ *  时钟偏差让锁屏歌词/进度偏移）；浏览器为 null（no-op）。 */
+export const nativeMediaSync: NativeMediaSync | null = yuzuMediaPlugin
+  ? createNativeMediaSync(yuzuMediaPlugin, () => client.clock.serverNow())
+  : null;
 
 // ---------- 可观察身份 ----------
 let identity: Identity | null = null;

@@ -8,13 +8,14 @@ import { httpBase } from '../../config';
 import {
   api,
   getPersistedRoomId,
+  nativeMediaSync,
   roomCredentials,
   roomStore,
   setLastRoom,
 } from '../../app/session';
 import { renderer } from '../../app/player';
 import { syncMediaSession } from '../../app/mediasession';
-import { syncNativeMedia, yuzuMediaPlugin } from '../../app/nativemedia';
+import { yuzuMediaPlugin } from '../../app/nativemedia';
 import { createNativeLyricsSync, type NativeLyricsSync } from '../../app/nativelyrics';
 import { YuzuError } from '../../protocol/types';
 import { pushOverlayCloser, removeOverlayCloser } from '../backbutton';
@@ -93,13 +94,21 @@ function usePlaybackWiring(canControl: boolean): void {
     };
     const audible = { ...state.playback, playing: state.playback.playing && !personalPaused };
     syncMediaSession(audible, httpBase, handlers);
-    syncNativeMedia(audible, httpBase, handlers);
+    nativeMediaSync?.sync(audible, httpBase, handlers);
   }, [canControl, state.playback, personalPaused]);
 
   useEffect(() => {
     const id = setInterval(() => {
       renderer.tick();
       setPersonalPaused(renderer.isPersonalPaused);
+      // 播放期向原生会话推 1s 位置（serverNow 基准，与 UI 同钟）：ColorOS 对
+      // PlaybackState 插值，但推送基准随 serverNow 刷新以抵消时钟漂移。
+      // 暂停态不推（位置本就冻结）。
+      const playback = roomStore.getState().playback;
+      nativeMediaSync?.tick({
+        ...playback,
+        playing: playback.playing && !renderer.isPersonalPaused,
+      });
     }, 1000);
     return () => clearInterval(id);
   }, []);

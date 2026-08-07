@@ -113,9 +113,15 @@ Web 资源打包进 `android/`（`webDir: dist`），applicationId `dev.uwen.yuz
   存成 `Integer`，`getLong` 静默回退默认值 0。曾导致 PlaybackState position 与
   metadata DURATION 恒为 0、锁屏/通知进度条整体缺失（根因不在 JS）。数值一律按
   `getData().opt(name)` 的 `Number` 提取（见 `YuzuMediaPlugin.numberAsLong`）。
-- 进度条无需周期位置推送：真机实测（ColorOS 15）冻结 PlaybackState 更新后通知栏
-  进度条仍按 `position + (now - updateTime) * speed` 插值走动；sync 事件驱动推送
-  （切歌/暂停/seek）足够。曾误判 OEM 不插值而加每秒 tick，属失效修复，勿复刻。
+- 进度条插值依赖推送基准：ColorOS 对 PlaybackState 插值
+  （`position + (now - updateTime) * speed`），但位置推算**必须用 ClockSync
+  的 serverNow**（与 UI 同钟）——裸 `Date.now()` 会引入设备/服务器时钟偏差
+  （真机实测 +235ms），锁屏歌词/进度随之整体偏移。**start_lead 负窗口原样保留**
+  （只钳上限 duration）：切歌瞬间 position 为负，系统歌词无当前行，到 0 才起播，
+  与音频对齐；钳 0 会让歌词整首领先 start_lead。1s tick（`nativemedia.tick`）
+  持续用 serverNow 刷新 PlaybackState 以抵消时钟漂移，暂停态不推。
+  同步单例在 `app/session.ts` 组装（`nativeMediaSync`，注入
+  `client.clock.serverNow`），浏览器为 null。
 - **锁屏歌词（ColorOS 16+ lyricInfo 协议）**：歌词以 JSON 字符串挂
   `MediaMetadata` 的 `lyricInfo` 键（`{songName,artist,songId,lyric,translationLyric?}`，
   `lyric` 为带时间戳的原始 LRC 原文），系统管线渲染，播放进度由 PlaybackState 提供。

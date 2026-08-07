@@ -101,22 +101,43 @@ describe('createNativeMediaSync', () => {
     expect(plugin.setPlaybackState).toHaveBeenCalledTimes(2);
   });
 
-  it('clamps negative lead position to 0 and caps at duration', async () => {
+  it('keeps the start-lead negative window and caps at duration', async () => {
     const { plugin } = fakePlugin();
     const sync = createNativeMediaSync(plugin);
 
+    // position -600 @ updated_at 4000：距开播还有 600ms，保留负值让系统
+    // 歌词在曲目起播前无当前行（钳 0 会让歌词整首领先 start_lead）。
     sync.sync(makePlayback({ positionMs: -600, updatedAt: 4_000 }), BASE, {});
     sync.sync(makePlayback({ positionMs: 65_000, updatedAt: 4_000 }), BASE, {});
     await vi.advanceTimersByTimeAsync(0);
 
     expect(plugin.setPlaybackState).toHaveBeenNthCalledWith(1, {
       playing: true,
-      positionMs: 0,
+      positionMs: -600,
       rate: 1,
     });
     expect(plugin.setPlaybackState).toHaveBeenNthCalledWith(2, {
       playing: true,
       positionMs: 60_000,
+      rate: 1,
+    });
+  });
+
+  it('tick pushes the injected-clock position while playing', async () => {
+    const { plugin } = fakePlugin();
+    const sync = createNativeMediaSync(plugin, () => 5_000);
+
+    // position = 10_000 + (5_000 - 1_000) * 1 = 14_000
+    sync.tick(makePlayback());
+    // 暂停态不推（位置冻结，sync 已报过）；无当前曲目不推
+    sync.tick(makePlayback({ playing: false }));
+    sync.tick({ current: null, position_ms: 0, updated_at: 0, playing: false, rate: 1 });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(plugin.setPlaybackState).toHaveBeenCalledTimes(1);
+    expect(plugin.setPlaybackState).toHaveBeenCalledWith({
+      playing: true,
+      positionMs: 14_000,
       rate: 1,
     });
   });
