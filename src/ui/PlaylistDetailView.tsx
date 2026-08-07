@@ -134,7 +134,7 @@ export default function PlaylistDetailView(): JSX.Element {
             </span>
           )}
           <div className="min-w-0">
-            <h1 className="truncate font-display text-3xl font-semibold">{detail.playlist.name}</h1>
+            <h1 className="line-clamp-2 font-display text-xl leading-snug font-semibold md:text-3xl">{detail.playlist.name}</h1>
             <div className="mt-1.5 text-[13px] text-muted">
               {t('batch.trackCount', { count: detail.playlist.track_count })}
               {detail.playlist.description && (

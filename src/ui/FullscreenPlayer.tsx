@@ -142,7 +142,6 @@ export function FullscreenPlayer(props: {
             {current.cover_url ? (
               <img
                 src={coverSrc(current.cover_url)}
-                crossOrigin="anonymous"
                 alt=""
                 onLoad={grabGlow}
                 className="w-56 aspect-square rounded-xl object-cover landscape:w-32 sm:w-64 sm:landscape:w-40"
@@ -158,7 +157,8 @@ export function FullscreenPlayer(props: {
               {current.artist}
               {current.album && <span className="text-faint"> · {current.album}</span>}
             </div>
-            <div className="mt-5">
+            {/* 进度与控制左右留 padding，不顶格（移动端视觉诉求） */}
+            <div className="mt-5 px-4 landscape:px-0">
               {progressBlock}
             </div>
             {/* 个人暂停/继续：只影响本机跟随，房间仍在播（与 MobilePlayerBar 同一内核开关） */}
@@ -211,7 +211,6 @@ export function FullscreenPlayer(props: {
           {current.cover_url ? (
             <img
               src={coverSrc(current.cover_url)}
-              crossOrigin="anonymous"
               alt=""
               onLoad={grabGlow}
               className="w-full aspect-square rounded-xl object-cover"

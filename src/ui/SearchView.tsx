@@ -6,8 +6,10 @@
  */
 import { useEffect, useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
+import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ChevronRight, Disc3, ListMusic, ListPlus, Radio, Search as SearchIcon, User } from 'lucide-react';
+import { DropdownMenu } from 'radix-ui';
+import { ArrowLeft, Check, ChevronDown, ChevronRight, Disc3, ListMusic, ListPlus, Radio, Search as SearchIcon, User } from 'lucide-react';
 import type { SearchCategory, SearchEntity, SearchTrack } from '../api/types';
 import { api, roomStore } from '../app/session';
 import { useIdentity, useProviders, useRoomState } from './hooks';
@@ -70,15 +72,58 @@ export default function SearchView(): JSX.Element {
 
   return (
     <div className="view-enter mx-auto max-w-5xl px-4 pt-4 pb-10 md:px-7 md:pt-7">
-      {/* 移动端输入框：顶栏搜索 icon 跳转到这里，页面自带输入（桌面端用顶栏输入框） */}
+      {/* 移动端输入框：顶栏搜索 icon 跳转到这里，页面自带输入（桌面端用顶栏输入框）。
+          provider 切换折叠在框内左侧（与桌面顶栏同一交互） */}
       <form
-        className="mb-3 flex items-center gap-2 rounded-full border border-hairline bg-panel px-3.5 py-2 md:hidden"
+        className="mb-5 flex items-center gap-2 rounded-full border border-hairline bg-panel px-3.5 py-2 md:hidden"
         onSubmit={(event) => {
           event.preventDefault();
           const q = mobileKeyword.trim();
           if (q) navigate(`/search?q=${encodeURIComponent(q)}&p=${encodeURIComponent(provider)}`);
         }}
       >
+        {providers && providers.length > 1 && (
+          <>
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger asChild>
+                <button
+                  type="button"
+                  title={t('searchPage.providerPick')}
+                  className="flex flex-none items-center gap-1 font-mono text-[12px] text-muted hover:text-paper"
+                >
+                  {provider}
+                  <ChevronDown className="h-3 w-3 text-faint" />
+                </button>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content
+                  align="start"
+                  sideOffset={8}
+                  className="menu-content z-50 min-w-28 rounded-lg border border-hairline bg-panel-2 p-1.5"
+                >
+                  {providers.map((item) => (
+                    <DropdownMenu.Item
+                      key={item.id}
+                      onSelect={() => {
+                        localStorage.setItem(SEARCH_PROVIDER_KEY, item.id);
+                        navigate(
+                          query
+                            ? `/search?q=${encodeURIComponent(query)}&p=${encodeURIComponent(item.id)}`
+                            : `/search?p=${encodeURIComponent(item.id)}`,
+                        );
+                      }}
+                      className="flex cursor-pointer items-center justify-between gap-2 rounded-md px-2.5 py-2 font-mono text-[12.5px] text-muted outline-none data-[highlighted]:bg-[var(--hover)] data-[highlighted]:text-paper"
+                    >
+                      {item.id}
+                      {item.id === provider && <Check className="h-3.5 w-3.5 text-accent" />}
+                    </DropdownMenu.Item>
+                  ))}
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Root>
+            <span className="h-4 w-px flex-none bg-hairline" />
+          </>
+        )}
         <SearchIcon className="h-3.5 w-3.5 flex-none text-faint" />
         <input
           value={mobileKeyword}
@@ -87,33 +132,6 @@ export default function SearchView(): JSX.Element {
           className="search-input w-full min-w-0 bg-transparent text-[13px] placeholder:text-faint focus:outline-none"
         />
       </form>
-
-      {/* 移动端来源切换（桌面端在顶栏下拉）：沿用 chips 视觉，选中即换源并记忆 */}
-      {providers && providers.length > 1 && (
-        <div className="mb-5 flex flex-wrap gap-2 md:hidden">
-          {providers.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => {
-                localStorage.setItem(SEARCH_PROVIDER_KEY, item.id);
-                navigate(
-                  query
-                    ? `/search?q=${encodeURIComponent(query)}&p=${encodeURIComponent(item.id)}`
-                    : `/search?p=${encodeURIComponent(item.id)}`,
-                );
-              }}
-              className={`rounded-full px-3.5 py-1.5 font-mono text-[12.5px] transition-colors ${
-                provider === item.id
-                  ? 'bg-accent text-on-accent'
-                  : 'border border-hairline text-muted hover:border-faint hover:text-paper'
-              }`}
-            >
-              {item.id}
-            </button>
-          ))}
-        </div>
-      )}
 
       <div className="mb-6 flex flex-wrap gap-2">
         {chips.map((chip) => (
@@ -187,6 +205,37 @@ function useEnqueue() {
   return enqueue;
 }
 
+function EnqueueFab({
+  count,
+  onCommit,
+}: {
+  count: number;
+  onCommit: () => void;
+}) {
+  const { t } = useTranslation();
+
+  if (count === 0) return null;
+
+  const label = `${t('batch.addSelected')} · ${t('batch.selectedCount', { count })}`;
+
+  return createPortal(
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onCommit}
+      className="fixed right-4 bottom-[calc(var(--chrome-b)+16px)] z-40 grid h-12 w-12 place-items-center rounded-full bg-accent text-on-accent transition-transform active:scale-95 md:right-7"
+      style={{ boxShadow: 'var(--toast-shadow)' }}
+    >
+      <ListPlus className="h-5 w-5" aria-hidden="true" />
+      <span className="absolute -top-1 -right-1 grid min-h-5 min-w-5 place-items-center rounded-full border border-hairline bg-panel-2 px-1 font-mono text-[10px] leading-none text-paper tabular-nums">
+        {count}
+      </span>
+    </button>,
+    document.body,
+  );
+}
+
 // ---------- 曲目列表（搜索结果与钻取结果共用） ----------
 
 function TrackList({
@@ -218,20 +267,13 @@ function TrackList({
 
   return (
     <div>
-      {selectedRefs.size > 0 && (
-        <div className="mb-2.5 flex justify-end">
-          <button
-            type="button"
-            onClick={() => {
-              enqueue(Array.from(selectedRefs));
-              setSelectedRefs(new Set());
-            }}
-            className="rounded-full bg-accent px-3.5 py-1 text-xs font-medium text-on-accent hover:brightness-105"
-          >
-            {t('batch.addSelected')} · {t('batch.selectedCount', { count: selectedRefs.size })}
-          </button>
-        </div>
-      )}
+      <EnqueueFab
+        count={selectedRefs.size}
+        onCommit={() => {
+          enqueue(Array.from(selectedRefs));
+          setSelectedRefs(new Set());
+        }}
+      />
       <div className="overflow-hidden rounded-lg border border-hairline bg-panel">
         {tracks.map((track, index) => {
           const selected = selectedRefs.has(track.track_ref);
@@ -270,17 +312,6 @@ function TrackList({
               <span className="flex-none font-mono text-[11px] text-faint tabular-nums">
                 {formatMs(track.duration_ms)}
               </span>
-              <button
-                type="button"
-                title={t('search.add')}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  enqueue([track.track_ref], track.title);
-                }}
-                className="flex-none px-1.5 text-lg leading-none text-accent hover:brightness-110"
-              >
-                +
-              </button>
             </div>
           );
         })}
@@ -623,7 +654,7 @@ function TopArtistResult({
           </div>
         )}
         <span className="min-w-0">
-          <span className="block truncate font-display text-2xl font-semibold">{top.name}</span>
+          <span className="block line-clamp-2 font-display text-xl leading-tight font-semibold md:text-2xl">{top.name}</span>
           <span className="mt-1 block text-xs text-muted">{t('searchPage.catArtists')}</span>
         </span>
       </button>
@@ -707,8 +738,8 @@ function AlbumGrid({
                 <Disc3 className="h-8 w-8" />
               </span>
             )}
-            <div className="mt-2 truncate text-[13px] font-medium">{album.name}</div>
-            {album.detail && <div className="mt-0.5 truncate text-[11px] text-faint">{album.detail}</div>}
+            <div className="mt-2 line-clamp-2 text-[13px] leading-snug font-medium">{album.name}</div>
+            {album.detail && <div className="mt-0.5 line-clamp-2 text-[11px] text-faint">{album.detail}</div>}
           </button>
         ))}
       </div>
@@ -789,20 +820,20 @@ function EntityDrill({
         <ArrowLeft className="h-4 w-4" />
       </button>
 
-      {/* hero：圆形艺人头像 / 方形专辑封面 + 大名 */}
-      <div className="mb-6 flex items-end gap-6">
+      {/* hero：圆形艺人头像 / 方形专辑封面 + 大名（移动端缩小字号并允许两行，长名不再截断） */}
+      <div className="mb-6 flex items-end gap-4 md:gap-6">
         {drill.coverUrl ? (
           <img
             src={coverSrc(drill.coverUrl)}
             alt=""
-            className={`h-36 w-36 flex-none object-cover ${
+            className={`h-28 w-28 flex-none object-cover md:h-36 md:w-36 ${
               drill.type === 'artist' ? 'rounded-full' : 'rounded-lg'
             }`}
             style={{ boxShadow: 'var(--cover-shadow)' }}
           />
         ) : (
           <div
-            className={`grid h-36 w-36 flex-none place-items-center bg-panel-2 text-faint ${
+            className={`grid h-28 w-28 flex-none place-items-center bg-panel-2 text-faint md:h-36 md:w-36 ${
               drill.type === 'artist' ? 'rounded-full' : 'rounded-lg'
             }`}
           >
@@ -813,8 +844,8 @@ function EntityDrill({
           <div className="font-mono text-[11px] tracking-[0.14em] uppercase text-faint">
             {t(drill.type === 'artist' ? 'searchPage.catArtists' : 'searchPage.catAlbums')}
           </div>
-          <h2 className="mt-1 truncate font-display text-4xl font-semibold">{drill.name}</h2>
-          {drill.detail && <div className="mt-1.5 truncate text-[13px] text-muted">{drill.detail}</div>}
+          <h2 className="mt-1 line-clamp-2 font-display text-2xl leading-tight font-semibold md:text-4xl">{drill.name}</h2>
+          {drill.detail && <div className="mt-1.5 line-clamp-2 text-[13px] text-muted">{drill.detail}</div>}
           {tracks && tracks.length > 0 && (
             <button
               type="button"

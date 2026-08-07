@@ -244,8 +244,8 @@ function ActivityCard({ trackRef, title, meta }: { trackRef: string; title: stri
         src={coverSrc(`/api/v1/cover/${encodeURIComponent(trackRef)}`)}
         className="aspect-square w-full rounded"
       />
-      <div className="mt-2 truncate text-[13px] font-medium">{title}</div>
-      <div className="mt-0.5 truncate text-[11px] text-faint">{meta}</div>
+      <div className="mt-2 line-clamp-2 text-[13px] leading-snug font-medium">{title}</div>
+      <div className="mt-0.5 line-clamp-2 text-[11px] text-faint">{meta}</div>
     </button>
   );
 }
