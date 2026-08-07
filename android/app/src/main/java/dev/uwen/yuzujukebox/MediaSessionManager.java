@@ -55,6 +55,8 @@ public class MediaSessionManager {
     private String artworkUrl = "";
     private long durationMs = 0;
     private Bitmap artwork;
+    /** 锁屏歌词（ColorOS lyricInfo JSON，协议见 docs）。空 = 无歌词，不写进 metadata。 */
+    private String lyricInfo = "";
     /** 封面加载序号：异步回写时丢弃过期结果（切歌快于下载）。 */
     private int artworkSeq = 0;
 
@@ -189,7 +191,20 @@ public class MediaSessionManager {
         if (artwork != null) {
             builder.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, artwork);
         }
+        if (!lyricInfo.isEmpty()) {
+            builder.putString("lyricInfo", lyricInfo);
+        }
         session.setMetadata(builder.build());
+    }
+
+    /** 锁屏歌词：完整 lyricInfo JSON（含时间轴 LRC）或 null 移除（切歌先清旧歌词）。
+     *  事件驱动提交，勿周期推送；播放进度由 PlaybackState 提供。 */
+    void setLyricInfo(final String lyricInfo) {
+        main.post(() -> {
+            this.lyricInfo = lyricInfo == null ? "" : lyricInfo;
+            pushMetadata();
+            notifyChanged();
+        });
     }
 
     void setPlaybackState(final boolean playing, final long positionMs, final float rate) {
@@ -219,6 +234,7 @@ public class MediaSessionManager {
     void clear() {
         main.post(() -> {
             playing = false;
+            lyricInfo = "";
             session.setActive(false);
             session.setMetadata(null);
             session.setPlaybackState(

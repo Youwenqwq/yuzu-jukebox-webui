@@ -64,6 +64,13 @@ public class YuzuMediaPlugin extends Plugin {
         call.resolve();
     }
 
+    /** ColorOS 锁屏歌词：lyricInfo JSON 字符串或 null（切歌移除）。 */
+    @PluginMethod
+    public void setLyricInfo(PluginCall call) {
+        manager.setLyricInfo(call.getString("lyricInfo"));
+        call.resolve();
+    }
+
     @PluginMethod
     public void clearSession(PluginCall call) {
         manager.clear();

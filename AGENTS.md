@@ -108,6 +108,27 @@ Web 资源打包进 `android/`（`webDir: dist`），applicationId `dev.uwen.yuz
   `navigator.mediaSession` 没有系统出口（锁屏/蓝牙按键），所以原生端重做一份，
   JS 契约与 `app/mediasession.ts` 相同（`app/nativemedia.ts`，shell/state.ts 双写）。
 - 保活语义：房间有当前曲目即起服务，离房/停止即停；唤醒锁只在 playing 时持有。
+- **Capacitor 桥数值读取坑**：`PluginCall.getLong()` 只接受 org.json 解析为 `Long`
+  的值——JS 侧 int 范围的数字（positionMs/durationMs 这类几万~几十万）会被 JSONObject
+  存成 `Integer`，`getLong` 静默回退默认值 0。曾导致 PlaybackState position 与
+  metadata DURATION 恒为 0、锁屏/通知进度条整体缺失（根因不在 JS）。数值一律按
+  `getData().opt(name)` 的 `Number` 提取（见 `YuzuMediaPlugin.numberAsLong`）。
+- 进度条无需周期位置推送：真机实测（ColorOS 15）冻结 PlaybackState 更新后通知栏
+  进度条仍按 `position + (now - updateTime) * speed` 插值走动；sync 事件驱动推送
+  （切歌/暂停/seek）足够。曾误判 OEM 不插值而加每秒 tick，属失效修复，勿复刻。
+- **锁屏歌词（ColorOS 16+ lyricInfo 协议）**：歌词以 JSON 字符串挂
+  `MediaMetadata` 的 `lyricInfo` 键（`{songName,artist,songId,lyric,translationLyric?}`，
+  `lyric` 为带时间戳的原始 LRC 原文），系统管线渲染，播放进度由 PlaybackState 提供。
+  实现见 `app/nativelyrics.ts`（state.ts 组装单例，订阅 roomStore 曲目变化）：
+  **事件驱动，每首歌最多 2 次**——切歌先推 null 清旧词，歌词就绪推完整 payload，
+  800ms 后幂等补交一次（防抖窗口可能吞首次提交）；勿周期推送、勿写 TITLE/ARTIST
+  身份字段、勿把当前歌词行写进 lyricInfo。歌词源 = 服务端 `GET /api/v1/lyrics`
+  的 `lrc`/`tlrc` 原始字符串（不经过 parseLrc 合并）。
+  **媒体卡片单行歌词已通；全屏/沉浸歌词入口不可达**（真机 ColorOS 16.1 反编译
+  SystemUI 确认）：入口由 `MediaActionPrioritySelector.getLyricEntrance(pkg)` 按
+  **包名白名单**（`oplusActionConfig` 内置 + OPPO RUS 云控 `RUS_LYRIC_ENTRANCE_KEY`）
+  发放，标准 MediaSession API 无任何请求机制，非 Root/LSPosed 无解（原项目
+  ColorOS-Live-Lyrics-Bridge 正是 hook 该方法强制返回 52）。勿再尝试系统侧全屏。
 - `ui/backbutton.ts`：返回键统一分发——覆盖层关闭栈栈顶先收，非根页面 history
   后退，根部 minimizeApp（**不能 finish Activity**：Activity 销毁 = WebView 销毁 =
   停止出声）。

@@ -14,12 +14,18 @@ import {
 } from '../../app/session';
 import { renderer } from '../../app/player';
 import { syncMediaSession } from '../../app/mediasession';
-import { syncNativeMedia } from '../../app/nativemedia';
+import { syncNativeMedia, yuzuMediaPlugin } from '../../app/nativemedia';
+import { createNativeLyricsSync, type NativeLyricsSync } from '../../app/nativelyrics';
 import { YuzuError } from '../../protocol/types';
 import { pushOverlayCloser, removeOverlayCloser } from '../backbutton';
 import { useIdentity, useRoomState } from '../hooks';
 import { useToast } from '../toast';
 import type { JoinResult, ShellValue } from '../shellContext';
+
+/** ColorOS 锁屏歌词单例：原生端由插件+api 组装，浏览器为 null（no-op）。 */
+const nativeLyrics: NativeLyricsSync | null = yuzuMediaPlugin
+  ? createNativeLyricsSync(yuzuMediaPlugin, (trackRef) => api.lyrics(trackRef))
+  : null;
 
 /** 播放授权（controller/radio）：由服务端按 Principal / Room grant / policy 推导。 */
 function useCapabilities(): { canControl: boolean; canRadio: boolean } {
@@ -96,6 +102,15 @@ function usePlaybackWiring(canControl: boolean): void {
       setPersonalPaused(renderer.isPersonalPaused);
     }, 1000);
     return () => clearInterval(id);
+  }, []);
+
+  // ColorOS 锁屏歌词：曲目变化时由歌词桥处理（切歌清旧词 → 拉新词提交）。
+  // 歌词与播放授权无关，所有听众都推；非原生平台 nativeLyrics 为 null。
+  useEffect(() => {
+    if (!nativeLyrics) return undefined;
+    const handle = () => nativeLyrics.sync(roomStore.getState().playback.current);
+    handle();
+    return roomStore.subscribe(handle);
   }, []);
 
   // 浏览器自动播放限制：首次手势时补一次 play（判断交给渲染内核）

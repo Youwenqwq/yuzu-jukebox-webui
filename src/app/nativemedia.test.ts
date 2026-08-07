@@ -9,6 +9,7 @@ function fakePlugin() {
   const plugin: YuzuMediaPluginHandle = {
     setMetadata: vi.fn(async () => {}),
     setPlaybackState: vi.fn(async () => {}),
+    setLyricInfo: vi.fn(async (_options: { lyricInfo: string | null }) => {}),
     clearSession: vi.fn(async () => {}),
     startKeepAlive: vi.fn(async () => {}),
     stopKeepAlive: vi.fn(async () => {}),

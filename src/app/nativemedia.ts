@@ -28,6 +28,7 @@ export interface YuzuMediaPluginHandle {
     durationMs: number;
   }): Promise<void>;
   setPlaybackState(options: { playing: boolean; positionMs: number; rate: number }): Promise<void>;
+  setLyricInfo(options: { lyricInfo: string | null }): Promise<void>;
   clearSession(): Promise<void>;
   startKeepAlive(): Promise<void>;
   stopKeepAlive(): Promise<void>;
@@ -133,6 +134,9 @@ export const isNativeApp: boolean = Capacitor.isNativePlatform();
 
 const pluginHandle = isNativeApp ? registerPlugin<YuzuMediaPluginHandle>('YuzuMedia') : null;
 const nativeSync = pluginHandle ? createNativeMediaSync(pluginHandle) : null;
+
+/** 原生 YuzuMedia 插件句柄（歌词桥与媒体桥共用同一注册，勿重复 registerPlugin）。 */
+export const yuzuMediaPlugin = pluginHandle;
 
 /** 原生端媒体会话同步；非原生平台（浏览器）为 no-op。 */
 export function syncNativeMedia(
