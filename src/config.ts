@@ -1,8 +1,14 @@
 /**
- * 服务端基址解析。优先级：public/config.js（运行期，部署可改）
- * > VITE_* 环境变量（构建期）> 同源默认。
+ * 服务端基址解析。优先级：
+ * 原生 App（Capacitor）= localStorage 用户自选（NATIVE_SERVER_KEY）
+ * > public/config.js（运行期）> VITE_*（构建期）> 同源默认。
+ * 浏览器部署不适用用户自选（同源即服务端），该 override 只在原生平台读取。
  * config.js 在 index.html 中先于模块脚本执行，此处可直接读全局值。
  */
+import { Capacitor } from '@capacitor/core';
+
+/** 原生 App 内用户自选服务端的 localStorage key；仅原生平台生效。 */
+export const NATIVE_SERVER_KEY = 'yuzu-server';
 
 interface YuzuRuntimeConfig {
   server?: string;
@@ -22,7 +28,14 @@ declare global {
 
 const runtime = globalThis.YUZU_CONFIG ?? {};
 
+// 原生壳里「同源」是打包资产（https://localhost），不是服务端；
+// 因此原生平台允许用户在登录页/账户菜单里自选服务端地址。
+const nativeOverride = Capacitor.isNativePlatform()
+  ? (localStorage.getItem(NATIVE_SERVER_KEY) ?? '').replace(/\/$/, '')
+  : '';
+
 const configured = (
+  nativeOverride ||
   runtime.server ||
   (import.meta.env.VITE_YUZU_SERVER as string | undefined) ||
   ''

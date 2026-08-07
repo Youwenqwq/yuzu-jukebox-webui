@@ -14,7 +14,9 @@ import {
 } from '../../app/session';
 import { renderer } from '../../app/player';
 import { syncMediaSession } from '../../app/mediasession';
+import { syncNativeMedia } from '../../app/nativemedia';
 import { YuzuError } from '../../protocol/types';
+import { pushOverlayCloser, removeOverlayCloser } from '../backbutton';
 import { useIdentity, useRoomState } from '../hooks';
 import { useToast } from '../toast';
 import type { JoinResult, ShellValue } from '../shellContext';
@@ -60,17 +62,17 @@ function usePlaybackWiring(canControl: boolean): void {
   }, [state.playback]);
 
   useEffect(() => {
-    syncMediaSession(
-      state.playback,
-      httpBase,
-      canControl
-        ? {
-            onPlay: () => void roomStore.resume().catch(() => {}),
-            onPause: () => void roomStore.pause().catch(() => {}),
-            onNextTrack: () => void roomStore.skip().catch(() => {}),
-          }
-        : {},
-    );
+    const handlers = canControl
+      ? {
+          onPlay: () => void roomStore.resume().catch(() => {}),
+          onPause: () => void roomStore.pause().catch(() => {}),
+          onNextTrack: () => void roomStore.skip().catch(() => {}),
+        }
+      : {};
+    // Web 版写 navigator.mediaSession；原生版（Capacitor）推给前台服务，
+    // 同一契约双写，各自在自己的平台上为空转。
+    syncMediaSession(state.playback, httpBase, handlers);
+    syncNativeMedia(state.playback, httpBase, handlers);
   }, [canControl, state.playback]);
 
   useEffect(() => {
@@ -98,6 +100,13 @@ export function useShellState(): ShellValue {
 
   const [queueOpen, setQueueOpen] = useState(false);
   const [roomsOpen, setRoomsOpen] = useState(false);
+
+  // Android 返回键：队列抽屉开时压入关闭栈（原生壳外为空转）
+  useEffect(() => {
+    if (!queueOpen) return;
+    pushOverlayCloser('queue-drawer', () => setQueueOpen(false));
+    return () => removeOverlayCloser('queue-drawer');
+  }, [queueOpen]);
 
   const joinRoom = useCallback(
     async (targetId: string, password?: string): Promise<JoinResult> => {

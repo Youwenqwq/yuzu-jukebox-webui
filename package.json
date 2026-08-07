@@ -12,6 +12,9 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/core": "^8.5.0",
     "i18next": "^25.0.0",
     "lucide-react": "^1.28.0",
     "qrcode": "^1.5.4",
@@ -22,6 +25,7 @@
     "react-router-dom": "^7.0.0"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.0",
     "@tailwindcss/vite": "^4.1.0",
     "@types/node": "^26.1.1",
     "@types/qrcode": "^1.5.6",

@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Yuzu Jukebox</string>
+    <string name="title_activity_main">Yuzu Jukebox</string>
+    <string name="package_name">dev.uwen.yuzujukebox</string>
+    <string name="custom_url_scheme">dev.uwen.yuzujukebox</string>
+    <string name="notification_channel_playback">播放</string>
+    <string name="notification_play">播放</string>
+    <string name="notification_pause">暂停</string>
+    <string name="notification_next">下一首</string>
+</resources>

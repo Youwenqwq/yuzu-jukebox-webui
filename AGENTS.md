@@ -95,6 +95,38 @@ pnpm build          # tsc -b + vite build
 - `httpBase` 同源部署时是空串：凡需要绝对 URL 的场景（`new URL(path, base)`、
   Media Session artwork 等）必须 `base || location.origin` 回退。
 
+## Android 壳（Capacitor v8）
+
+Web 资源打包进 `android/`（`webDir: dist`），applicationId `dev.uwen.yuzujukebox`。
+存在理由只有一个：**前台服务保活**——浏览器 tab 会被 OEM 省电杀掉，WebView 没有
+前台服务一样被杀。浏览器与 App 是同一份代码，原生能力全部按 `isNativeApp`
+（`app/nativemedia.ts`）运行时探测，不得出现分支专属实现。
+
+- `android/.../YuzuMediaPlugin.java` + `MediaSessionManager.java` +
+  `YuzuPlaybackService.java`：mediaPlayback 前台服务 + 系统 MediaSession +
+  MediaStyle 通知 + 播放期 partial wake lock。WebView 的
+  `navigator.mediaSession` 没有系统出口（锁屏/蓝牙按键），所以原生端重做一份，
+  JS 契约与 `app/mediasession.ts` 相同（`app/nativemedia.ts`，shell/state.ts 双写）。
+- 保活语义：房间有当前曲目即起服务，离房/停止即停；唤醒锁只在 playing 时持有。
+- `ui/backbutton.ts`：返回键统一分发——覆盖层关闭栈栈顶先收，非根页面 history
+  后退，根部 minimizeApp（**不能 finish Activity**：Activity 销毁 = WebView 销毁 =
+  停止出声）。
+- 服务端地址：原生平台 localStorage `yuzu-server`（App 内登录页/账户菜单可改）
+  > config.js > VITE_*；改地址会清 `yuzu-session`/`yuzu-room-credentials`/
+  `yuzu-last-room` 并 reload。cleartext 走 manifest `usesCleartextTraffic`
+  （v8 平台不读 `server.cleartext` 配置项），`android.allowMixedContent` 允许
+  https 壳加载 http 流。
+- 已知缺口：队列拖拽是 HTML5 DnD，触摸端不可用（把手已隐藏，替代交互未做）。
+
+```bash
+pnpm build && npx cap sync android          # Web 产物 → android assets
+cd android && ./gradlew assembleDebug       # 需 ANDROID_HOME 或 local.properties sdk.dir
+```
+
+部署前提：服务端 config 开启 `cors.enabled` 且 `allowed_origins` 含
+`https://localhost`（Capacitor 壳的 origin；WS 已放开 OriginPatterns *）。
+真机安装：`adb install android/app/build/outputs/apk/debug/app-debug.apk`。
+
 ## 测试约定
 
 - 内核测试注入依赖：TransportLike（WS）、fetchFn、Storage、手写 fake audio 表面。
@@ -132,6 +164,7 @@ oidcConfig 主 id）、`title` 网页标题、`favicon` 图标（空 = 内置 fa
 `accent` 默认主题色、`scheme` 默认深浅色（空 = 跟随系统）、
 `admin_password_enabled` 是否显示访客管理员口令框（仅当服务端
 `admin_password` 非空时为 true；公域留空则 false）。
-优先级：server/oidc/admin_password_enabled 为 config.js > VITE_* > 默认；
+优先级：server/oidc/admin_password_enabled 为（原生平台 localStorage `yuzu-server` 用户自选 >）
+config.js > VITE_* > 默认；
 accent/scheme 为用户本机选择（localStorage）> config.js > 内置默认。
 redirect_uri 恒为应用根（无路径无 hash），IdP 应用白名单按此登记。
