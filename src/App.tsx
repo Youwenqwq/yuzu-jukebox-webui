@@ -9,6 +9,7 @@ import MobileShell from './ui/MobileShell';
 import HomeView from './ui/HomeView';
 import SearchView from './ui/SearchView';
 import PlaylistDetailView from './ui/PlaylistDetailView';
+import SourceCollectionView from './ui/SourceCollectionView';
 import LibraryView from './ui/LibraryView';
 import RoomDeepLink from './ui/RoomDeepLink';
 import AdminView from './ui/AdminView';
@@ -80,6 +81,7 @@ export default function App() {
               <Route path="/" element={<HomeView />} />
               <Route path="/search" element={<SearchView />} />
               <Route path="/playlist/:playlistId" element={<PlaylistDetailView />} />
+              <Route path="/source/:spec" element={<SourceCollectionView />} />
               <Route path="/library" element={<LibraryView />} />
               {/* 旧 /room/:id 链接的兼容入口：同样只承担「切房」动作 */}
               <Route path="/r/:roomId" element={<RoomDeepLink />} />

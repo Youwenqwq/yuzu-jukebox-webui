@@ -5,13 +5,13 @@
  */
 import { useEffect, useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import type { HotTrack, StatsEntry } from '../api/types';
 import { api, roomStore } from '../app/session';
 import { useIdentity, useProviders, useRoomState } from './hooks';
 import { coverSrc } from './cover';
 import { CoverThumb } from './CoverThumb';
 import { SOURCE_DESC_KEYS } from './radioSources';
-import { TracksDialog } from './TracksDialog';
 import { useToast } from './toast';
 import { useShell } from './AppShell';
 
@@ -54,13 +54,12 @@ function SectionTitle({ children }: { children: string }) {
 
 function RadioSection(): JSX.Element | null {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const state = useRoomState();
   const { canRadio, setRoomsOpen } = useShell();
   const providers = useProviders();
   const { show, showError } = useToast();
   const [busy, setBusy] = useState(false);
-  const [tracksSource, setTracksSource] = useState<{ composed: string; title: string } | null>(null);
-
   const catalog = (providers ?? []).flatMap((p) =>
     (p.capabilities?.radio_sources ?? []).map((source) => ({
       providerId: p.id,
@@ -71,7 +70,7 @@ function RadioSection(): JSX.Element | null {
   );
 
   // 回归 provider 侧原始语义：finite 无参源（每日推荐/新歌等）是每日/定期刷新的
-  // 曲目集合 → 以列表弹窗呈现；无限流（私人FM/心动）才是真电台 → 直接开。
+  // 曲目集合 → 进集合页（复用曲库歌单展示）；无限流（私人FM/心动）才是真电台 → 直接开。
   // simi 是「当前曲目的相似检索」，入口在播放控制区（相似小窗），不在此陈列；
   // 带参源（top:<id>/fav:<id>）首页无参数上下文，不陈列。
   const collections = catalog.filter((e) => e.source.finite && !e.source.arg);
@@ -116,10 +115,7 @@ function RadioSection(): JSX.Element | null {
                   disabled={!usable}
                   title={usable ? undefined : t('radio.credentialNeed')}
                   onClick={() =>
-                    setTracksSource({
-                      composed: `${providerId}:${source.spec}`,
-                      title: source.name ?? source.spec,
-                    })
+                    navigate(`/source/${encodeURIComponent(`${providerId}:${source.spec}`)}`)
                   }
                   className={cardClass}
                 >
@@ -165,17 +161,6 @@ function RadioSection(): JSX.Element | null {
           )}
         </section>
       )}
-
-      <TracksDialog
-        open={tracksSource !== null}
-        onOpenChange={(open) => {
-          if (!open) setTracksSource(null);
-        }}
-        title={tracksSource?.title ?? ''}
-        load={() =>
-          api.radioTracks(tracksSource?.composed ?? '', { limit: 100 }).then((r) => r.tracks)
-        }
-      />
     </>
   );
 }
