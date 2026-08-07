@@ -114,6 +114,8 @@ export interface RadioSourceInfo {
   arg?: string;
   name?: string;
   finite: boolean;
+  /** 启动/物化是否需要服务端配置的有效凭据（缺省 false） */
+  requires_credential?: boolean;
 }
 
 export type SearchCategory = 'song' | 'artist' | 'album' | 'playlist';
@@ -125,6 +127,8 @@ export interface ProviderCapabilities {
   search_categories?: SearchCategory[];
   /** 歌手钻取支持 into=albums（专辑列表，可再钻曲目）；缺失 = 不支持 */
   entity_albums?: boolean;
+  /** 支持一次性相似曲目查询（GET /providers/{id}/similar）；缺失 = 不支持 */
+  similar?: boolean;
 }
 
 export interface ProviderInfo {

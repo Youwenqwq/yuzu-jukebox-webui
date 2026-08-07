@@ -6,7 +6,6 @@
  */
 import { useEffect, useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
-import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { DropdownMenu } from 'radix-ui';
 import { ArrowLeft, Check, ChevronDown, ChevronRight, Disc3, ListMusic, ListPlus, Radio, Search as SearchIcon, User } from 'lucide-react';
@@ -15,7 +14,7 @@ import { api, roomStore } from '../app/session';
 import { useIdentity, useProviders, useRoomState } from './hooks';
 import { coverSrc } from './cover';
 import { composeSource, entityRadioSource } from './radioSources';
-import { formatMs } from './format';
+import { TrackList, useEnqueue } from './TrackList';
 import { useToast } from './toast';
 import { SEARCH_PROVIDER_KEY, useShell } from './AppShell';
 
@@ -35,13 +34,6 @@ interface DrillTarget {
   name: string;
   coverUrl?: string;
   detail?: string;
-}
-
-/**
- * 曲目封面：track.cover_url 为空 = 源站没给封面；回退代理路径让 GetTrack 再试一次。
- */
-function trackCover(track: SearchTrack): string {
-  return coverSrc(track.cover_url || `/api/v1/cover/${encodeURIComponent(track.track_ref)}`);
 }
 
 export default function SearchView(): JSX.Element {
@@ -172,160 +164,6 @@ export default function SearchView(): JSX.Element {
         ) : (
           <EntitySection provider={provider} query={query} category={category} onDrill={setDrill} />
         ))}
-    </div>
-  );
-}
-
-// ---------- 入队共享 ----------
-
-function useEnqueue() {
-  const { t } = useTranslation();
-  const state = useRoomState();
-  const { setRoomsOpen } = useShell();
-  const { show, showError } = useToast();
-
-  const enqueue = (refs: string[], toastTitle?: string) => {
-    if (!state.roomId) {
-      show(t('home.needRoom'));
-      setRoomsOpen(true);
-      return;
-    }
-    void (async () => {
-      for (let offset = 0; offset < refs.length; offset += 100) {
-        await roomStore.addQueue(refs.slice(offset, offset + 100));
-      }
-      show(
-        refs.length === 1 && toastTitle
-          ? t('room.addedToast', { title: toastTitle })
-          : t('room.addedBatchToast', { count: refs.length }),
-      );
-    })().catch(showError);
-  };
-
-  return enqueue;
-}
-
-function EnqueueFab({
-  count,
-  onCommit,
-}: {
-  count: number;
-  onCommit: () => void;
-}) {
-  const { t } = useTranslation();
-
-  if (count === 0) return null;
-
-  const label = `${t('batch.addSelected')} · ${t('batch.selectedCount', { count })}`;
-
-  return createPortal(
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={onCommit}
-      className="fixed right-4 bottom-[calc(var(--chrome-b)+16px)] z-40 grid h-12 w-12 place-items-center rounded-full bg-accent text-on-accent transition-transform active:scale-95 md:right-7"
-      style={{ boxShadow: 'var(--toast-shadow)' }}
-    >
-      <ListPlus className="h-5 w-5" aria-hidden="true" />
-      <span className="absolute -top-1 -right-1 grid min-h-5 min-w-5 place-items-center rounded-full border border-hairline bg-panel-2 px-1 font-mono text-[10px] leading-none text-paper tabular-nums">
-        {count}
-      </span>
-    </button>,
-    document.body,
-  );
-}
-
-// ---------- 曲目列表（搜索结果与钻取结果共用） ----------
-
-function TrackList({
-  tracks,
-  onLoadMore,
-  loadingMore = false,
-}: {
-  tracks: SearchTrack[];
-  onLoadMore?: () => void;
-  loadingMore?: boolean;
-}) {
-  const { t } = useTranslation();
-  const enqueue = useEnqueue();
-  const [selectedRefs, setSelectedRefs] = useState<Set<string>>(() => new Set());
-
-  // 新一批结果清空选择
-  useEffect(() => {
-    setSelectedRefs(new Set());
-  }, [tracks]);
-
-  const toggleRef = (trackRef: string) => {
-    setSelectedRefs((current) => {
-      const next = new Set(current);
-      if (next.has(trackRef)) next.delete(trackRef);
-      else next.add(trackRef);
-      return next;
-    });
-  };
-
-  return (
-    <div>
-      <EnqueueFab
-        count={selectedRefs.size}
-        onCommit={() => {
-          enqueue(Array.from(selectedRefs));
-          setSelectedRefs(new Set());
-        }}
-      />
-      <div className="overflow-hidden rounded-lg border border-hairline bg-panel">
-        {tracks.map((track, index) => {
-          const selected = selectedRefs.has(track.track_ref);
-          return (
-            <div
-              key={track.track_ref}
-              role="checkbox"
-              aria-checked={selected}
-              tabIndex={0}
-              onClick={() => toggleRef(track.track_ref)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  toggleRef(track.track_ref);
-                }
-              }}
-              className={`flex cursor-pointer items-center gap-3 border-b border-l-2 border-hairline px-3.5 py-2 select-none last:border-b-0 ${
-                selected ? 'border-l-accent bg-panel-2' : 'border-l-transparent hover:bg-panel-2'
-              }`}
-            >
-              <span className="w-5 flex-none text-right font-mono text-[11px] text-faint tabular-nums">
-                {index + 1}
-              </span>
-              <img
-                src={trackCover(track)}
-                alt=""
-                className="h-9 w-9 flex-none rounded object-cover"
-              />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[13.5px]">{track.title}</div>
-                <div className="mt-0.5 truncate text-[11.5px] text-muted">
-                  {track.artist}
-                  {track.album ? ` · ${track.album}` : ''}
-                </div>
-              </div>
-              <span className="flex-none font-mono text-[11px] text-faint tabular-nums">
-                {formatMs(track.duration_ms)}
-              </span>
-            </div>
-          );
-        })}
-        {onLoadMore && (
-          <button
-            type="button"
-            onClick={onLoadMore}
-            disabled={loadingMore}
-            className="w-full border-t border-hairline py-2.5 text-xs text-accent hover:bg-panel-2 disabled:opacity-40"
-          >
-            {loadingMore ? t('common.loading') : t('searchPage.loadMore')}
-          </button>
-        )}
-      </div>
     </div>
   );
 }

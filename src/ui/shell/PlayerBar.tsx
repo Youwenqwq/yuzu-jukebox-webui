@@ -14,6 +14,7 @@ import type { AccountPlaylist } from '../../api/types';
 import type { Playback } from '../../protocol/types';
 import { useLyrics } from '../useLyrics';
 import { coverSrc } from '../cover';
+import { SimilarButton } from '../SimilarButton';
 import { useProviders, useRoomState } from '../hooks';
 import { formatMs } from '../format';
 import { FullscreenPlayer } from '../FullscreenPlayer';
@@ -257,6 +258,7 @@ export function PlayerBar(): JSX.Element {
         {accountTarget?.canPlaylistAdd && (
           <AddToAccountPlaylist providerId={accountTarget.providerId} trackId={accountTarget.trackId} />
         )}
+        {current && <SimilarButton />}
       </div>
 
       {/* 中：进度（统一展示；房间控制已移至房间切换面板） */}

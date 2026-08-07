@@ -414,6 +414,34 @@ export class ApiClient {
     return asList(result.tracks);
   }
 
+  /** 有限电台源的一次性物化（每日推荐/榜单/新歌）：spec 含 provider 前缀，如 "ncm:daily"。 */
+  async radioTracks(
+    source: string,
+    opts: { limit?: number; offset?: number } = {},
+  ): Promise<{ tracks: SearchTrack[]; total: number | null }> {
+    const query = new URLSearchParams({ source });
+    if (opts.limit !== undefined) query.set('limit', String(opts.limit));
+    if (opts.offset !== undefined) query.set('offset', String(opts.offset));
+    const result = await this.#json<{ tracks: SearchTrack[] | null; total: number | null }>(
+      `/api/v1/radio/tracks?${query}`,
+    );
+    return { tracks: asList(result.tracks), total: result.total ?? null };
+  }
+
+  /** 一次性相似曲目查询（provider 报告 capabilities.similar 才可用）。 */
+  async similarTracks(
+    provider: string,
+    trackId: string,
+    opts: { limit?: number } = {},
+  ): Promise<SearchTrack[]> {
+    const query = new URLSearchParams({ track: trackId });
+    if (opts.limit !== undefined) query.set('limit', String(opts.limit));
+    const result = await this.#json<{ tracks: SearchTrack[] | null }>(
+      `/api/v1/providers/${encodeURIComponent(provider)}/similar?${query}`,
+    );
+    return asList(result.tracks);
+  }
+
   /** 歌手专辑列表（into=albums）：返回专辑实体，可再以 category=album 钻曲目。 */
   async searchEntityAlbums(
     provider: string,

@@ -9,6 +9,7 @@ import type { LyricLine } from '../player/lyrics';
 import { activeLineIndex } from '../player/lyrics';
 import { extractGlowColors } from './glow';
 import { coverSrc } from './cover';
+import { SimilarButton } from './SimilarButton';
 import { pushOverlayCloser, removeOverlayCloser } from './backbutton';
 import { LyricsPanel } from './LyricsPanel';
 import { formatClock, formatMs } from './format';
@@ -161,26 +162,31 @@ export function FullscreenPlayer(props: {
             <div className="mt-5 px-4 landscape:px-0">
               {progressBlock}
             </div>
-            {/* 个人暂停/继续：只影响本机跟随，房间仍在播（与 MobilePlayerBar 同一内核开关） */}
-            <button
-              type="button"
-              title={personalPaused ? t('room.personalResume') : t('room.personalPause')}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (personalPaused) renderer.resumePersonal();
-                else renderer.pausePersonal();
-                forceTick();
-              }}
-              className={`mx-auto mt-4 grid h-11 w-11 place-items-center rounded-full bg-accent text-on-accent landscape:mx-0 ${
-                personalPaused ? 'opacity-70' : 'hover:brightness-105'
-              }`}
-            >
-              {personalPaused ? (
-                <Play className="ml-0.5 h-5 w-5 fill-current" />
-              ) : (
-                <Pause className="h-5 w-5 fill-current" />
-              )}
-            </button>
+            {/* 个人暂停/继续 + 相似小窗：本机收听控制（与 MobilePlayerBar 同一内核开关） */}
+            <div className="mt-4 flex items-center justify-center gap-4 landscape:justify-start">
+              <button
+                type="button"
+                title={personalPaused ? t('room.personalResume') : t('room.personalPause')}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (personalPaused) renderer.resumePersonal();
+                  else renderer.pausePersonal();
+                  forceTick();
+                }}
+                className={`grid h-11 w-11 place-items-center rounded-full bg-accent text-on-accent ${
+                  personalPaused ? 'opacity-70' : 'hover:brightness-105'
+                }`}
+              >
+                {personalPaused ? (
+                  <Play className="ml-0.5 h-5 w-5 fill-current" />
+                ) : (
+                  <Pause className="h-5 w-5 fill-current" />
+                )}
+              </button>
+              <span onClick={(e) => e.stopPropagation()}>
+                <SimilarButton className="grid h-11 w-11 place-items-center rounded-full border border-hairline text-muted hover:border-faint hover:text-paper" />
+              </span>
+            </div>
           </div>
         </div>
 
@@ -233,6 +239,9 @@ export function FullscreenPlayer(props: {
           </div>
 
           <div className="mt-6">{progressBlock}</div>
+          <div className="mt-4">
+            <SimilarButton className="grid h-10 w-10 place-items-center rounded-full border border-hairline text-muted hover:border-faint hover:text-paper" />
+          </div>
         </div>
 
         {/* 右列：歌词 */}

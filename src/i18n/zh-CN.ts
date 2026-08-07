@@ -628,12 +628,17 @@ export const zhCN = {
   home: {
     eyebrow: '一起听',
     radioTitle: '随便听听',
+    collectionsTitle: '每日与榜单',
     hotTitle: '热门',
     statsTitle: '本房热门',
     playCount: '放过 {{count}} 次',
     loadMore: '加载更多',
     needRoom: '先进入一个房间',
     radioNeedControl: '这个房间的电台由控制者开启',
+  },
+  similar: {
+    title: '相似歌曲',
+    open: '找相似歌曲',
   },
   like: {
     like: '喜欢',
@@ -651,6 +656,8 @@ export const zhCN = {
     presetTopDesc: '跟着排行榜一路听',
     presetNewsongDesc: '每天都有新歌听',
     seedNeed: '房里正在放对应来源的歌时可用',
+    credentialNeed: '需要有效的来源凭据',
+    heartBoundHint: '以凭据账号的喜欢列表为基底',
     playlistSource: '歌单作台',
     playlistPick: '选一个歌单作电台…',
     advancedTitle: '高级：直接填曲目源',
