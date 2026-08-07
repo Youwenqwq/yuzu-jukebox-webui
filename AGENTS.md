@@ -116,14 +116,12 @@ Web 资源打包进 `android/`（`webDir: dist`），applicationId `dev.uwen.yuz
   `yuzu-last-room` 并 reload。cleartext 走 manifest `usesCleartextTraffic`
   （v8 平台不读 `server.cleartext` 配置项），`android.allowMixedContent` 允许
   https 壳加载 http 流。
-- 已知缺口：队列拖拽是 HTML5 DnD，触摸端不可用（把手已隐藏，替代交互未做）。
-
 ```bash
 pnpm build && npx cap sync android          # Web 产物 → android assets
 cd android && ./gradlew assembleDebug       # 需 ANDROID_HOME 或 local.properties sdk.dir
 ```
 
-部署前提：服务端 config 开启 `cors.enabled` 且 `allowed_origins` 含
+- 部署前提：服务端 config 开启 `cors.enabled` 且 `allowed_origins` 含
 `https://localhost`（Capacitor 壳的 origin；WS 已放开 OriginPatterns *）。
 真机安装：`adb install android/app/build/outputs/apk/debug/app-debug.apk`。
 
