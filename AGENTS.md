@@ -192,4 +192,10 @@ oidcConfig 主 id）、`title` 网页标题、`favicon` 图标（空 = 内置 fa
 优先级：server/oidc/admin_password_enabled 为（原生平台 localStorage `yuzu-server` 用户自选 >）
 config.js > VITE_* > 默认；
 accent/scheme 为用户本机选择（localStorage）> config.js > 内置默认。
-redirect_uri 恒为应用根（无路径无 hash），IdP 应用白名单按此登记。
+redirect_uri 平台相关：Web = 应用根（无路径无 hash）；原生平台（Capacitor）
+= 自定义 scheme `yuzu-jukebox://oauth`（manifest VIEW intent-filter，singleTask
+onNewIntent → App 插件 `appUrlOpen` 事件 → App.tsx 处理；授权页经
+`@capacitor/browser` Custom Tab 打开，与系统浏览器共享 SSO cookie）。
+**IdP 应用白名单需同时登记两个 redirect_uri**。scheme 改动后 `cap sync`
+会重写 manifest 的 Capacitor 段，但 MainActivity 的 intent-filter 是手写的，
+不要被覆盖。

@@ -10,6 +10,10 @@ interface OidcFlowOptions {
   storage?: Storage;
   fetchFn?: typeof fetch;
   redirectFn?: (url: string) => void;
+  /** 打开授权页：默认 location.assign（Web）；原生平台注入 Browser.open（Custom Tab）。 */
+  openAuthPage?: (url: string) => void | Promise<void>;
+  /** 回调 redirect_uri：默认当前应用根（Web）；原生平台返回自定义 scheme（如 yuzu-jukebok://oauth）。 */
+  resolveRedirectUri?: () => string;
 }
 
 interface DiscoveryDocument {
@@ -81,9 +85,14 @@ export function createOidcFlow(opts: OidcFlowOptions = {}): OidcFlow {
       const state = randomBase64Url();
       const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
       const challenge = encodeBase64Url(new Uint8Array(digest));
-      const callbackUrl = new URL(globalThis.location.href);
-      callbackUrl.search = '';
-      callbackUrl.hash = '';
+      const callbackUrl = opts.resolveRedirectUri
+        ? new URL(opts.resolveRedirectUri())
+        : (() => {
+            const current = new URL(globalThis.location.href);
+            current.search = '';
+            current.hash = '';
+            return current;
+          })();
       const clientId = beginOpts.clientId ?? cfg.client_id;
 
       storage.setItem(STATE_KEY, state);
@@ -101,6 +110,10 @@ export function createOidcFlow(opts: OidcFlowOptions = {}): OidcFlow {
       authorizationUrl.searchParams.set('state', state);
       authorizationUrl.searchParams.set('code_challenge', challenge);
       authorizationUrl.searchParams.set('code_challenge_method', 'S256');
+      if (opts.openAuthPage) {
+        await opts.openAuthPage(authorizationUrl.href);
+        return;
+      }
       redirect(authorizationUrl.href);
     },
 

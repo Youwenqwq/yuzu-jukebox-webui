@@ -24,6 +24,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- OIDC PKCE 回调：IdP 以 yuzu-jukebok://oauth?code=… 拉起 App，
+                 singleTask + App 插件 appUrlOpen 事件送回 JS（src/App.tsx）。 -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="yuzu-jukebox" />
+            </intent-filter>
+
         </activity>
 
         <service

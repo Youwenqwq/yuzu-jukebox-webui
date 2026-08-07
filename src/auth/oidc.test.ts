@@ -129,6 +129,50 @@ describe('OIDC Authorization Code + PKCE flow', () => {
     expect(storage.getItem('yuzu-oidc-verifier')).toBeNull();
   });
 
+  it('uses the injected scheme redirect and opens the auth page in-app on native platforms', async () => {
+    const storage = new MemoryStorage();
+    const opened: string[] = [];
+    const assigned = vi.fn();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/.well-known/openid-configuration')) {
+        return new Response(
+          JSON.stringify({
+            authorization_endpoint: 'https://idp.example/oauth/v2/authorize',
+            token_endpoint: 'https://idp.example/oauth/v2/token',
+          }),
+        );
+      }
+      return new Response(JSON.stringify({ id_token: 'signed-id-token' }));
+    });
+    const flow = createOidcFlow({
+      storage,
+      fetchFn: fetchMock as typeof fetch,
+      redirectFn: assigned,
+      openAuthPage: (url) => {
+        opened.push(url);
+      },
+      resolveRedirectUri: () => 'yuzu-jukebox://oauth',
+    });
+
+    await flow.begin(config);
+    const state = storage.getItem('yuzu-oidc-state');
+
+    expect(assigned).not.toHaveBeenCalled();
+    expect(opened).toHaveLength(1);
+    const authorizeUrl = new URL(opened[0]);
+    expect(authorizeUrl.searchParams.get('redirect_uri')).toBe('yuzu-jukebox://oauth');
+    expect(authorizeUrl.searchParams.get('state')).toBe(state);
+
+    // 回调以 scheme 形式到达，token 交换仍用同一 redirect_uri
+    await expect(
+      flow.handleCallback(`yuzu-jukebox://oauth?code=scheme-code&state=${state}`),
+    ).resolves.toEqual({ idToken: 'signed-id-token' });
+    const [, tokenInit] = fetchMock.mock.calls[1];
+    const tokenBody = new URLSearchParams(String(tokenInit?.body));
+    expect(tokenBody.get('redirect_uri')).toBe('yuzu-jukebox://oauth');
+  });
+
   it('rejects a mismatched callback state before token exchange', async () => {
     const storage = new MemoryStorage();
     const fetchMock = vi.fn(async () =>

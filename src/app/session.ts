@@ -9,7 +9,8 @@ import { createRoomCredentialStore } from '../auth/roomCredentials';
 import { YuzuClient } from '../protocol/client';
 import { SessionStore } from '../protocol/store';
 import type { Identity } from '../protocol/types';
-import { createNativeMediaSync, yuzuMediaPlugin } from './nativemedia';
+import { Browser } from '@capacitor/browser';
+import { createNativeMediaSync, isNativeApp, yuzuMediaPlugin } from './nativemedia';
 import type { NativeMediaSync } from './nativemedia';
 
 export const tokenStore = createSessionTokenStore();
@@ -19,7 +20,19 @@ export const api = new ApiClient(() => tokenStore.get(), {
 });
 export const client = new YuzuClient();
 export const roomStore = new SessionStore(client);
-export const oidcFlow = createOidcFlow();
+/** OIDC 回调 redirect_uri：原生平台用自定义 scheme（IdP 白名单需登记），
+ *  Web 平台保持应用根。scheme 拉起 App 后由 App.tsx 的 appUrlOpen 监听接管。 */
+export const OIDC_REDIRECT_URI = 'yuzu-jukebox://oauth';
+
+export const oidcFlow = createOidcFlow(
+  isNativeApp
+    ? {
+        // Custom Tab 打开授权页：与系统浏览器共享 SSO cookie，返回手势可回 App。
+        openAuthPage: (url) => Browser.open({ url }),
+        resolveRedirectUri: () => OIDC_REDIRECT_URI,
+      }
+    : {},
+);
 
 /** 原生媒体会话同步单例：serverNow 时钟基准（与 UI 同钟，避免设备/服务器
  *  时钟偏差让锁屏歌词/进度偏移）；浏览器为 null（no-op）。 */

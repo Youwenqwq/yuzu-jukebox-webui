@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import { App as CapacitorApp } from '@capacitor/app';
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { oidcFlow, session } from './app/session';
+import { isNativeApp } from './app/nativemedia';
 import { initTheme } from './app/theme';
 import { YuzuError } from './protocol/types';
 import LoginView from './ui/LoginView';
@@ -36,19 +38,49 @@ export default function App() {
   const [phase, setPhase] = useState<Phase>('boot');
   const [oidcError, setOidcError] = useState<YuzuError | null>(null);
 
+  // OAuth 回调统一处理（Web 的 location 回调与原生 scheme 回调共用）：
+  // token 交换成功 → 登入并进 ready；无回调 → 保持现有阶段。
+  const handleOidcCallback = async (url: string): Promise<boolean> => {
+    const tokens = await oidcFlow.handleCallback(url);
+    if (tokens === null) return false;
+    await session.loginOidc(tokens.idToken, tokens.accessToken);
+    return true;
+  };
+
   useEffect(() => {
+    // 原生平台：IdP 以自定义 scheme（yuzu-jukebox://oauth?code=…）拉起 App，
+    // 经 appUrlOpen 事件到达；处理一次后移除监听。
+    if (isNativeApp) {
+      let listener: { remove: () => Promise<void> } | null = null;
+      CapacitorApp.addListener('appUrlOpen', ({ url }) => {
+        void handleOidcCallback(url)
+          .then((ok) => setPhase(ok ? 'ready' : 'login'))
+          .catch((err: unknown) => {
+            setOidcError(err instanceof YuzuError ? err : new YuzuError('unknown', String(err)));
+            setPhase('login');
+          })
+          .finally(() => {
+            void listener?.remove();
+          });
+      }).then((handle) => {
+        listener = handle;
+      });
+      void session.boot().then((ok) => setPhase(ok ? 'ready' : 'login'));
+      return;
+    }
+
+    // Web：redirect_uri = 应用根，code/state 落在 location.search
     const cleanUrl = () => history.replaceState(null, '', location.pathname + location.hash);
     if (isOidcCallback()) {
-      oidcFlow
-        .handleCallback(location.href)
-        .then(async (tokens) => {
-          if (tokens === null) return session.boot();
-          await session.loginOidc(tokens.idToken, tokens.accessToken);
-          return true;
-        })
-        .then((ok) => {
+      handleOidcCallback(location.href)
+        .then(async (ok) => {
           cleanUrl();
-          setPhase(ok ? 'ready' : 'login');
+          if (ok) {
+            setPhase('ready');
+            return;
+          }
+          const booted = await session.boot();
+          setPhase(booted ? 'ready' : 'login');
         })
         .catch((err: unknown) => {
           cleanUrl();
